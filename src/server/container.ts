@@ -8,7 +8,10 @@ import {
 import { LocalKmsEmulatorKeyProvider } from '../adapters/google/kms-key-provider';
 import type { VerifiedActor } from '../domain/schemas';
 import { AutomationWorker } from '../services/automation-worker';
-import { BuilderAgentService } from '../services/builder-agent-service';
+import {
+  BuilderAgentService,
+  buildTemplateDefinition,
+} from '../services/builder-agent-service';
 import { CaptureService } from '../services/capture-service';
 import { ExportService } from '../services/export-service';
 import { MemoryService } from '../services/memory-service';
@@ -368,6 +371,75 @@ async function seedJudgeDemoData(
       dueDate: '2026-09-14',
     },
     notesMarkdown: 'Evaluating self-hosted Docker deployment and one-click zip export.',
+  });
+
+  // 2. Inventory & Stock Manager App
+  const invApp = await store.saveAppDraft(ownerActor, {
+    appId: 'app-inventory',
+    definition: buildTemplateDefinition('Inventory & Stock Manager'),
+    workflow: {
+      schemaVersion: 1,
+      name: 'Daily Stock & Reorder Digest',
+      enabled: true,
+      trigger: { type: 'schedule', cron: '0 7 * * *' },
+      steps: [
+        {
+          id: 'step-stock-digest',
+          type: 'summarize_collection',
+          collectionIds: ['col-vault-test'],
+          promptTemplate:
+            'Summarize low stock SKUs and supplier reorder items into a Markdown report.',
+          outputFolderId: testFolder.id,
+        },
+      ],
+    },
+  });
+
+  const invApproval = await store.issueApproval(ownerActor, {
+    action: 'publish_app',
+    canonicalPayload: { appId: invApp.id, expectedVersion: invApp.version },
+  });
+  await store.publishApp(ownerActor, {
+    appId: invApp.id,
+    expectedVersion: invApp.version,
+    approvalId: invApproval.id,
+    requestMac: invApproval.requestMac,
+  });
+
+  await store.createAppRecord(ownerActor, {
+    appId: invApp.id,
+    recId: 'sku-h100-rack',
+    fields: {
+      title: 'NVIDIA H100 Node Rack (SKU-8840)',
+      status: 'In Stock',
+      amount: 14,
+      dueDate: '2026-09-20',
+    },
+    notesMarkdown: 'Warehouse A-12. Reserved for Q4 private cloud cluster.',
+  });
+
+  await store.createAppRecord(ownerActor, {
+    appId: invApp.id,
+    recId: 'sku-coral-tpu',
+    fields: {
+      title: 'Google Coral Edge TPU Dev Kit (SKU-2190)',
+      status: 'Low Stock',
+      amount: 3,
+      dueDate: '2026-09-05',
+    },
+    notesMarkdown: 'Below minimum threshold (10 units). Trigger supplier PO.',
+  });
+
+  await store.createAppRecord(ownerActor, {
+    appId: invApp.id,
+    recId: 'sku-starlink-ent',
+    fields: {
+      title: 'Starlink Enterprise Terminal (SKU-5510)',
+      status: 'Reordered',
+      amount: 25,
+      dueDate: '2026-09-12',
+    },
+    notesMarkdown: 'Purchase order #PO-9941 confirmed; ETA Sept 12.',
   });
 
   // Also seed Tenant B (`org-beta`) to demonstrate strict tenant isolation live

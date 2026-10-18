@@ -98,6 +98,36 @@ export class ExportService {
       2
     );
 
+    files['docker-compose.self-host.yml'] = [
+      'services:',
+      '  low-self-hosted:',
+      '    image: ghcr.io/berezovsky360/low-google:latest',
+      '    ports:',
+      '      - "3000:8080"',
+      '    environment:',
+      '      - NODE_ENV=production',
+      '      - PORT=8080',
+      '      - LOW_IMPORT_ARCHIVE=/data',
+      '    volumes:',
+      '      - ./:/data:ro',
+      '',
+    ].join('\n');
+
+    files['SELF_HOST.md'] = [
+      `# ${org?.name ?? actor.orgId} — Portable LOW Workspace & Apps`,
+      '',
+      '## Quick Start (Self-Hosted)',
+      '```bash',
+      'docker compose -f docker-compose.self-host.yml up -d',
+      '```',
+      '',
+      '## Contents',
+      '- `vault/` — Decrypted Markdown source-of-truth files',
+      '- `apps/*/definition.json` — Strict schema-validated No-Code App & Workflow definitions',
+      '- `apps/*/records/*.md` — Decrypted Markdown records with YAML frontmatter',
+      '',
+    ].join('\n');
+
     const zipBuffer = await this.packToZipBuffer(files);
     return { zipBuffer, files };
   }

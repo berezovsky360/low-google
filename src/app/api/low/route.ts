@@ -234,6 +234,38 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ rebuildStats: stats });
       }
 
+      case 'create_app_from_prompt': {
+        const prompt = String(data.prompt ?? 'Custom Workspace App');
+        const definition = builderAgentService.createDefinitionFromPrompt(prompt);
+        const app = await store.saveAppDraft(actor, {
+          definition,
+        });
+        const pubApproval = await store.issueApproval(actor, {
+          action: 'publish_app',
+          canonicalPayload: { appId: app.id, expectedVersion: app.version },
+        });
+        const published = await store.publishApp(actor, {
+          appId: app.id,
+          expectedVersion: app.version,
+          approvalId: pubApproval.id,
+          requestMac: pubApproval.requestMac,
+        });
+        const firstStatus =
+          definition.fields.find((f) => f.key === 'status')?.options?.[0] ??
+          'Draft';
+        await store.createAppRecord(actor, {
+          appId: published.app.id,
+          fields: {
+            title: `${definition.name} — Item #1`,
+            status: firstStatus,
+            amount: 120,
+            dueDate: '2026-09-18',
+          },
+          notesMarkdown: `Created automatically for **${definition.name}**.`,
+        });
+        return NextResponse.json({ app: published.app });
+      }
+
       case 'propose_builder_diff': {
         const diff = await builderAgentService.proposeAppDiff(actor, {
           appId: String(data.appId),

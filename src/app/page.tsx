@@ -225,6 +225,7 @@ export default function LowWorkspacePage() {
   const [memoryLoading, setMemoryLoading] = useState(false);
 
   // App Builder
+  const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
   const [codeTab, setCodeTab] = useState<'app' | 'builder' | 'audit'>('app');
   const [builderInstruction, setBuilderInstruction] = useState('');
   const [proposedDiff, setProposedDiff] = useState<BuilderDiffItem | null>(null);
@@ -507,8 +508,33 @@ export default function LowWorkspacePage() {
     }
   };
 
-  const handleProposeDiff = async (appId: string) => {
-    if (!builderInstruction.trim()) return;
+  const handleCreateAppFromPrompt = async (promptText: string) => {
+    const prompt = promptText.trim();
+    if (!prompt) return;
+    const res = await fetch('/api/low', {
+      method: 'POST',
+      headers: apiHeaders,
+      body: JSON.stringify({
+        operation: 'create_app_from_prompt',
+        data: { prompt },
+      }),
+    });
+    const data = await res.json();
+    if (res.ok && data.app) {
+      await refreshWorkspace();
+      setSelectedAppId(data.app.id);
+      setProposedDiff(null);
+      setBuilderInstruction('');
+      notify(`Created ${data.app.draftDefinition.name}`);
+    }
+  };
+
+  const handleProposeDiff = async (appId: string, overrideInstruction?: string) => {
+    const instruction = (overrideInstruction ?? builderInstruction).trim();
+    if (!instruction) return;
+    if (overrideInstruction) {
+      setBuilderInstruction(overrideInstruction);
+    }
     const res = await fetch('/api/low', {
       method: 'POST',
       headers: apiHeaders,
@@ -516,7 +542,7 @@ export default function LowWorkspacePage() {
         operation: 'propose_builder_diff',
         data: {
           appId,
-          instruction: builderInstruction,
+          instruction,
         },
       }),
     });
@@ -567,8 +593,16 @@ export default function LowWorkspacePage() {
     }
   };
 
+  const activeApp =
+    apps.find((a) => a.id === selectedAppId) ?? apps[0] ?? null;
+  const activeAppRecords = activeApp ? (appRecordsMap[activeApp.id] ?? []) : [];
+
   const handleCreateDealRecord = async (appId: string) => {
     if (!newDealTitle.trim()) return;
+    const statusField = activeApp?.draftDefinition.fields.find(
+      (f) => f.key === 'status'
+    );
+    const initialStatus = statusField?.options?.[0] ?? 'Draft';
     const res = await fetch('/api/low', {
       method: 'POST',
       headers: apiHeaders,
@@ -578,7 +612,7 @@ export default function LowWorkspacePage() {
           appId,
           fields: {
             title: newDealTitle.trim(),
-            status: 'Draft',
+            status: initialStatus,
             amount: Number(newDealAmount) || 0,
             dueDate: '2026-09-18',
           },
@@ -637,9 +671,6 @@ export default function LowWorkspacePage() {
       notify('Job completed');
     }
   };
-
-  const activeApp = apps[0] ?? null;
-  const activeAppRecords = activeApp ? (appRecordsMap[activeApp.id] ?? []) : [];
 
   return (
     <div
@@ -1962,289 +1993,213 @@ export default function LowWorkspacePage() {
           )}
 
           {/* =============================================================== */}
-          {/* VIEW 7: MINIMALIST CODE / APP BUILDER                           */}
+          {/* VIEW 7: MINIMALIST CODE / APP BUILDER STUDIO                    */}
           {/* =============================================================== */}
-          {viewMode === 'code' && activeApp && (
-            <div
-              style={{
-                flex: 1,
-                padding: '16px 24px',
-                overflowY: 'auto',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 16,
-              }}
-            >
-              {/* Minimal Sub-nav */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  {(['app', 'builder', 'audit'] as const).map((tab) => (
-                    <button
-                      key={tab}
-                      onClick={() => setCodeTab(tab)}
-                      style={{
-                        backgroundColor: codeTab === tab ? '#1f1f24' : 'transparent',
-                        border: '1px solid #222226',
-                        borderRadius: 8,
-                        padding: '5px 12px',
-                        fontSize: 12,
-                        color: codeTab === tab ? '#f4f4f6' : '#8e8e93',
-                        cursor: 'pointer',
-                        textTransform: 'capitalize',
-                      }}
-                    >
-                      {tab}
-                    </button>
-                  ))}
-                </div>
+          {viewMode === 'code' && activeApp && (() => {
+            const previewDef =
+              proposedDiff && proposedDiff.appId === activeApp.id
+                ? proposedDiff.proposedDefinition
+                : activeApp.draftDefinition;
+            const statusFieldDef = previewDef.fields.find((f) => f.key === 'status');
+            const statusStages =
+              statusFieldDef?.options && statusFieldDef.options.length > 0
+                ? statusFieldDef.options
+                : ['Draft', 'In Review', 'Approved'];
+            const amountFieldDef = previewDef.fields.find((f) => f.key === 'amount');
+            const isCurrency =
+              /crm|sales|deal|contract|revenue/i.test(previewDef.name) ||
+              /value|\$/i.test(amountFieldDef?.label ?? '');
+            const metricComponents = previewDef.components.filter(
+              (c) => c.type === 'metric'
+            );
+            const hasKanban = previewDef.components.some((c) => c.type === 'kanban');
+            const hasTable = previewDef.components.some((c) => c.type === 'table');
+            const hasCalendar = previewDef.components.some((c) => c.type === 'calendar');
 
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button
-                    onClick={() => void handleRunAutomationJob(activeApp.id)}
-                    style={{
-                      backgroundColor: '#131316',
-                      border: '1px solid #222226',
-                      borderRadius: 8,
-                      padding: '5px 10px',
-                      fontSize: 11,
-                      color: '#a1a1aa',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 5,
-                    }}
-                  >
-                    <Play size={12} />
-                    <span>Run Job</span>
-                  </button>
-                  <button
-                    onClick={() => void handlePublishApp(activeApp)}
-                    style={{
-                      backgroundColor: '#0088ff',
-                      color: '#ffffff',
-                      border: 'none',
-                      borderRadius: 8,
-                      padding: '5px 12px',
-                      fontSize: 11,
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Publish v{activeApp.publishedSnapshotVersion ?? 1}
-                  </button>
-                </div>
-              </div>
+            const computeMetricValue = (op?: 'count' | 'sum' | 'avg') => {
+              if (op === 'count') return activeAppRecords.length.toLocaleString();
+              const nums = activeAppRecords.map((r) => Number(r.fields.amount ?? 0));
+              const sum = nums.reduce((a, b) => a + b, 0);
+              if (op === 'avg') {
+                const avg = nums.length > 0 ? Math.round(sum / nums.length) : 0;
+                return isCurrency ? `$${avg.toLocaleString()}` : avg.toLocaleString();
+              }
+              return isCurrency ? `$${sum.toLocaleString()}` : sum.toLocaleString();
+            };
 
-              {codeTab === 'app' && (
-                <>
-                  {/* Minimal Metrics + Quick Record Input */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr', gap: 12 }}>
-                    <div
-                      style={{
-                        backgroundColor: '#131316',
-                        border: '1px solid #1f1f24',
-                        borderRadius: 12,
-                        padding: 14,
-                      }}
-                    >
-                      <div style={{ fontSize: 11, color: '#71717a' }}>Pipeline</div>
-                      <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>
-                        $
-                        {activeAppRecords
-                          .reduce((acc, r) => acc + Number(r.fields.amount ?? 0), 0)
-                          .toLocaleString()}
-                      </div>
-                    </div>
+            return (
+              <div
+                style={{
+                  flex: 1,
+                  padding: '16px 24px 80px 24px',
+                  overflowY: 'auto',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 14,
+                }}
+              >
+                {/* Row 1: App Switcher + New App Presets + Actions */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 10,
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    {apps.map((appItem) => {
+                      const isSelected = appItem.id === activeApp.id;
+                      return (
+                        <button
+                          key={appItem.id}
+                          onClick={() => {
+                            setSelectedAppId(appItem.id);
+                            setProposedDiff(null);
+                          }}
+                          style={{
+                            backgroundColor: isSelected ? '#0088ff' : '#131316',
+                            color: isSelected ? '#ffffff' : '#a1a1aa',
+                            border: isSelected ? 'none' : '1px solid #222226',
+                            borderRadius: 8,
+                            padding: '5px 11px',
+                            fontSize: 12,
+                            fontWeight: isSelected ? 600 : 400,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {appItem.draftDefinition.name}
+                        </button>
+                      );
+                    })}
 
-                    <div
-                      style={{
-                        backgroundColor: '#131316',
-                        border: '1px solid #1f1f24',
-                        borderRadius: 12,
-                        padding: 14,
-                      }}
-                    >
-                      <div style={{ fontSize: 11, color: '#71717a' }}>Records</div>
-                      <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>
-                        {activeAppRecords.length}
-                      </div>
-                    </div>
-
-                    <div
-                      style={{
-                        backgroundColor: '#131316',
-                        border: '1px solid #1f1f24',
-                        borderRadius: 12,
-                        padding: 14,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
-                      }}
-                    >
-                      <input
-                        value={newDealTitle}
-                        onChange={(e) => setNewDealTitle(e.target.value)}
-                        placeholder="New record..."
-                        style={{
-                          flex: 1,
-                          backgroundColor: '#1c1c21',
-                          border: 'none',
-                          borderRadius: 7,
-                          padding: '7px 10px',
-                          fontSize: 12,
-                          outline: 'none',
-                        }}
-                      />
-                      <input
-                        value={newDealAmount}
-                        onChange={(e) => setNewDealAmount(e.target.value)}
-                        style={{
-                          width: 80,
-                          backgroundColor: '#1c1c21',
-                          border: 'none',
-                          borderRadius: 7,
-                          padding: '7px 10px',
-                          fontSize: 12,
-                          outline: 'none',
-                        }}
-                      />
+                    {[
+                      { label: '+ CRM', prompt: 'Customer CRM & Deal Pipeline' },
+                      { label: '+ Inventory', prompt: 'Inventory & Stock Manager' },
+                      { label: '+ Tracker', prompt: 'Project & Operations Tracker' },
+                    ].map((preset) => (
                       <button
-                        onClick={() => void handleCreateDealRecord(activeApp.id)}
+                        key={preset.label}
+                        onClick={() => void handleCreateAppFromPrompt(preset.prompt)}
                         style={{
-                          backgroundColor: '#0088ff',
-                          color: '#ffffff',
-                          border: 'none',
-                          borderRadius: 7,
-                          padding: '7px 12px',
-                          fontSize: 12,
+                          backgroundColor: 'transparent',
+                          border: '1px dashed #27272a',
+                          borderRadius: 8,
+                          padding: '5px 9px',
+                          fontSize: 11,
+                          color: '#71717a',
                           cursor: 'pointer',
                         }}
                       >
-                        Add
+                        {preset.label}
                       </button>
-                    </div>
+                    ))}
                   </div>
 
-                  {/* Minimal Kanban */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-                    {['Draft', 'In Review', 'Approved'].map((stage) => {
-                      const stageRecords = activeAppRecords.filter(
-                        (r) => String(r.fields.status) === stage
-                      );
-                      return (
-                        <div
-                          key={stage}
-                          style={{
-                            backgroundColor: '#131316',
-                            border: '1px solid #1f1f24',
-                            borderRadius: 12,
-                            padding: 12,
-                          }}
-                        >
-                          <div
-                            style={{
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              fontSize: 11,
-                              color: '#8e8e93',
-                              marginBottom: 10,
-                            }}
-                          >
-                            <span>{stage}</span>
-                            <span>{stageRecords.length}</span>
-                          </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {(['app', 'builder', 'audit'] as const).map((tab) => (
+                      <button
+                        key={tab}
+                        onClick={() => setCodeTab(tab)}
+                        style={{
+                          backgroundColor: codeTab === tab ? '#1f1f24' : 'transparent',
+                          border: '1px solid #222226',
+                          borderRadius: 8,
+                          padding: '5px 10px',
+                          fontSize: 11,
+                          color: codeTab === tab ? '#f4f4f6' : '#8e8e93',
+                          cursor: 'pointer',
+                          textTransform: 'capitalize',
+                        }}
+                      >
+                        {tab}
+                      </button>
+                    ))}
 
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                            {stageRecords.map((rec) => (
-                              <div
-                                key={rec.id}
-                                style={{
-                                  backgroundColor: '#1a1a1f',
-                                  borderRadius: 8,
-                                  padding: 10,
-                                  fontSize: 12,
-                                }}
-                              >
-                                <div style={{ fontWeight: 600 }}>
-                                  {String(rec.fields.title ?? rec.id)}
-                                </div>
-                                <div
-                                  style={{
-                                    display: 'flex',
-                                    justifyContent: 'space-between',
-                                    alignItems: 'center',
-                                    marginTop: 6,
-                                    fontSize: 11,
-                                    color: '#71717a',
-                                  }}
-                                >
-                                  <span>
-                                    ${Number(rec.fields.amount ?? 0).toLocaleString()}
-                                  </span>
-                                  {stage === 'Draft' && (
-                                    <button
-                                      onClick={() =>
-                                        void handleTransitionRecord(
-                                          activeApp.id,
-                                          rec,
-                                          'In Review'
-                                        )
-                                      }
-                                      style={{
-                                        background: 'none',
-                                        border: 'none',
-                                        color: '#0088ff',
-                                        fontSize: 11,
-                                        cursor: 'pointer',
-                                      }}
-                                    >
-                                      Review →
-                                    </button>
-                                  )}
-                                  {stage === 'In Review' && (
-                                    <button
-                                      onClick={() =>
-                                        void handleTransitionRecord(
-                                          activeApp.id,
-                                          rec,
-                                          'Approved'
-                                        )
-                                      }
-                                      style={{
-                                        background: 'none',
-                                        border: 'none',
-                                        color: '#10b981',
-                                        fontSize: 11,
-                                        cursor: 'pointer',
-                                      }}
-                                    >
-                                      Approve →
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })}
+                    <button
+                      onClick={() => void handleRunAutomationJob(activeApp.id)}
+                      style={{
+                        backgroundColor: '#131316',
+                        border: '1px solid #222226',
+                        borderRadius: 8,
+                        padding: '5px 10px',
+                        fontSize: 11,
+                        color: '#a1a1aa',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4,
+                      }}
+                    >
+                      <Play size={11} />
+                      <span>Run</span>
+                    </button>
+
+                    <button
+                      onClick={() => void handlePublishApp(activeApp)}
+                      style={{
+                        backgroundColor: '#0088ff',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: 8,
+                        padding: '5px 11px',
+                        fontSize: 11,
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Publish v{activeApp.publishedSnapshotVersion ?? 1}
+                    </button>
+
+                    <button
+                      onClick={() => window.open('/api/low/export', '_blank')}
+                      title="Export portable .zip & Docker self-host kit"
+                      style={{
+                        backgroundColor: '#131316',
+                        border: '1px solid #222226',
+                        borderRadius: 8,
+                        padding: '5px 10px',
+                        fontSize: 11,
+                        color: '#e5e5e7',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 5,
+                      }}
+                    >
+                      <Download size={12} />
+                      <span>Self-Host .zip</span>
+                    </button>
                   </div>
-                </>
-              )}
+                </div>
 
-              {codeTab === 'builder' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 640 }}>
+                {/* Row 2: Minimalist Agent Prompt & Standard Component Palette */}
+                <div
+                  style={{
+                    backgroundColor: '#111114',
+                    border: '1px solid #1f1f24',
+                    borderRadius: 12,
+                    padding: 10,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 8,
+                  }}
+                >
                   <div style={{ display: 'flex', gap: 8 }}>
                     <input
                       value={builderInstruction}
                       onChange={(e) => setBuilderInstruction(e.target.value)}
-                      placeholder="Propose component diff (e.g. Add metric, Add calendar)..."
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') void handleProposeDiff(activeApp.id);
+                      }}
+                      placeholder="Agent prompt: 'Add average metric and table', 'Build Inventory dashboard', 'Add calendar'..."
                       style={{
                         flex: 1,
-                        backgroundColor: '#131316',
-                        border: '1px solid #222226',
+                        backgroundColor: '#18181c',
+                        border: '1px solid #25252b',
                         borderRadius: 8,
-                        padding: '8px 12px',
+                        padding: '7px 12px',
                         fontSize: 12,
                         outline: 'none',
                       }}
@@ -2252,94 +2207,459 @@ export default function LowWorkspacePage() {
                     <button
                       onClick={() => void handleProposeDiff(activeApp.id)}
                       style={{
-                        backgroundColor: '#1f1f24',
-                        border: '1px solid #2c2c32',
+                        backgroundColor: '#0088ff',
+                        color: '#ffffff',
+                        border: 'none',
                         borderRadius: 8,
                         padding: '0 14px',
                         fontSize: 12,
+                        fontWeight: 600,
                         cursor: 'pointer',
                       }}
                     >
-                      Preview Diff
+                      Build Diff
+                    </button>
+                    <button
+                      onClick={() => void handleCreateAppFromPrompt(builderInstruction)}
+                      style={{
+                        backgroundColor: '#18181c',
+                        color: '#a1a1aa',
+                        border: '1px solid #25252b',
+                        borderRadius: 8,
+                        padding: '0 12px',
+                        fontSize: 11,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      New App
                     </button>
                   </div>
 
-                  {proposedDiff && (
+                  {/* Quick Component Chips */}
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                    {[
+                      { label: '+ Metric', instruction: 'Add average metric card' },
+                      { label: '+ Kanban', instruction: 'Add kanban board' },
+                      { label: '+ Table', instruction: 'Add table grid' },
+                      { label: '+ Calendar', instruction: 'Add calendar schedule' },
+                      { label: '+ Form', instruction: 'Add quick intake form' },
+                      { label: 'CRM Layout', instruction: 'Transform into Sales CRM pipeline' },
+                      { label: 'Inventory Layout', instruction: 'Transform into Inventory & Stock Manager' },
+                    ].map((chip) => (
+                      <button
+                        key={chip.label}
+                        onClick={() => void handleProposeDiff(activeApp.id, chip.instruction)}
+                        style={{
+                          backgroundColor: '#18181c',
+                          border: '1px solid #222228',
+                          borderRadius: 6,
+                          padding: '3px 8px',
+                          fontSize: 11,
+                          color: '#8e8e93',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {chip.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {proposedDiff && proposedDiff.appId === activeApp.id && (
                     <div
                       style={{
-                        padding: 12,
-                        borderRadius: 10,
-                        backgroundColor: '#131316',
-                        border: '1px solid #222226',
+                        padding: '8px 12px',
+                        borderRadius: 8,
+                        backgroundColor: '#161b26',
+                        border: '1px solid #1e3a8a',
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'center',
                         fontSize: 12,
                       }}
                     >
-                      <span>{proposedDiff.summary}</span>
-                      <button
-                        onClick={() => void handleApplyDiff()}
-                        style={{
-                          backgroundColor: '#0088ff',
-                          color: '#ffffff',
-                          border: 'none',
-                          borderRadius: 6,
-                          padding: '5px 12px',
-                          fontSize: 11,
-                          cursor: 'pointer',
-                        }}
-                      >
-                        Apply
-                      </button>
+                      <span style={{ color: '#93c5fd' }}>
+                        Preview: {proposedDiff.summary} (+{proposedDiff.addedComponentIds.length} / ~
+                        {proposedDiff.modifiedComponentIds.length})
+                      </span>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button
+                          onClick={() => setProposedDiff(null)}
+                          style={{
+                            backgroundColor: 'transparent',
+                            color: '#a1a1aa',
+                            border: '1px solid #2c2c32',
+                            borderRadius: 6,
+                            padding: '4px 10px',
+                            fontSize: 11,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Discard
+                        </button>
+                        <button
+                          onClick={() => void handleApplyDiff()}
+                          style={{
+                            backgroundColor: '#0088ff',
+                            color: '#ffffff',
+                            border: 'none',
+                            borderRadius: 6,
+                            padding: '4px 12px',
+                            fontSize: 11,
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Apply
+                        </button>
+                      </div>
                     </div>
                   )}
+                </div>
 
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {activeApp.draftDefinition.components.map((c) => (
-                      <span
-                        key={c.id}
+                {codeTab === 'app' && (
+                  <>
+                    {/* Dynamic Metrics + Quick Record Intake Bar */}
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: `repeat(${Math.max(1, metricComponents.length)}, 1fr) 2fr`,
+                        gap: 12,
+                      }}
+                    >
+                      {metricComponents.map((mc) => (
+                        <div
+                          key={mc.id}
+                          style={{
+                            backgroundColor: '#131316',
+                            border: '1px solid #1f1f24',
+                            borderRadius: 12,
+                            padding: 14,
+                          }}
+                        >
+                          <div style={{ fontSize: 11, color: '#71717a' }}>
+                            {mc.label ?? 'Metric'}
+                          </div>
+                          <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>
+                            {computeMetricValue(mc.metricOperation)}
+                          </div>
+                        </div>
+                      ))}
+
+                      <div
                         style={{
-                          padding: '4px 8px',
-                          borderRadius: 6,
                           backgroundColor: '#131316',
                           border: '1px solid #1f1f24',
+                          borderRadius: 12,
+                          padding: 14,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                        }}
+                      >
+                        <input
+                          value={newDealTitle}
+                          onChange={(e) => setNewDealTitle(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') void handleCreateDealRecord(activeApp.id);
+                          }}
+                          placeholder={`${
+                            previewDef.fields.find((f) => f.key === 'title')?.label ?? 'Item'
+                          }...`}
+                          style={{
+                            flex: 1,
+                            backgroundColor: '#1c1c21',
+                            border: 'none',
+                            borderRadius: 7,
+                            padding: '7px 10px',
+                            fontSize: 12,
+                            outline: 'none',
+                          }}
+                        />
+                        <input
+                          value={newDealAmount}
+                          onChange={(e) => setNewDealAmount(e.target.value)}
+                          placeholder={amountFieldDef?.label ?? 'Value'}
+                          style={{
+                            width: 84,
+                            backgroundColor: '#1c1c21',
+                            border: 'none',
+                            borderRadius: 7,
+                            padding: '7px 10px',
+                            fontSize: 12,
+                            outline: 'none',
+                          }}
+                        />
+                        <button
+                          onClick={() => void handleCreateDealRecord(activeApp.id)}
+                          style={{
+                            backgroundColor: '#0088ff',
+                            color: '#ffffff',
+                            border: 'none',
+                            borderRadius: 7,
+                            padding: '7px 12px',
+                            fontSize: 12,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Add
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Dynamic Kanban Component */}
+                    {hasKanban && (
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: `repeat(${statusStages.length}, 1fr)`,
+                          gap: 12,
+                        }}
+                      >
+                        {statusStages.map((stage, stageIdx) => {
+                          const stageRecords = activeAppRecords.filter(
+                            (r) => String(r.fields.status) === stage
+                          );
+                          const nextStage = statusStages[stageIdx + 1];
+                          return (
+                            <div
+                              key={stage}
+                              style={{
+                                backgroundColor: '#131316',
+                                border: '1px solid #1f1f24',
+                                borderRadius: 12,
+                                padding: 12,
+                              }}
+                            >
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  fontSize: 11,
+                                  color: '#8e8e93',
+                                  marginBottom: 10,
+                                }}
+                              >
+                                <span>{stage}</span>
+                                <span>{stageRecords.length}</span>
+                              </div>
+
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                {stageRecords.map((rec) => (
+                                  <div
+                                    key={rec.id}
+                                    style={{
+                                      backgroundColor: '#1a1a1f',
+                                      borderRadius: 8,
+                                      padding: 10,
+                                      fontSize: 12,
+                                    }}
+                                  >
+                                    <div style={{ fontWeight: 600 }}>
+                                      {String(rec.fields.title ?? rec.id)}
+                                    </div>
+                                    <div
+                                      style={{
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        marginTop: 6,
+                                        fontSize: 11,
+                                        color: '#71717a',
+                                      }}
+                                    >
+                                      <span>
+                                        {isCurrency
+                                          ? `$${Number(rec.fields.amount ?? 0).toLocaleString()}`
+                                          : `${Number(rec.fields.amount ?? 0).toLocaleString()} units`}
+                                      </span>
+                                      {nextStage && (
+                                        <button
+                                          onClick={() =>
+                                            void handleTransitionRecord(
+                                              activeApp.id,
+                                              rec,
+                                              nextStage
+                                            )
+                                          }
+                                          style={{
+                                            background: 'none',
+                                            border: 'none',
+                                            color:
+                                              stageIdx === statusStages.length - 2
+                                                ? '#10b981'
+                                                : '#0088ff',
+                                            fontSize: 11,
+                                            cursor: 'pointer',
+                                          }}
+                                        >
+                                          {nextStage} →
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Dynamic Table Component */}
+                    {hasTable && (
+                      <div
+                        style={{
+                          backgroundColor: '#131316',
+                          border: '1px solid #1f1f24',
+                          borderRadius: 12,
+                          overflow: 'hidden',
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: '2fr 1fr 1fr 1fr',
+                            padding: '9px 14px',
+                            borderBottom: '1px solid #1f1f24',
+                            fontSize: 11,
+                            color: '#71717a',
+                          }}
+                        >
+                          <span>
+                            {previewDef.fields.find((f) => f.key === 'title')?.label ?? 'Title'}
+                          </span>
+                          <span>Status</span>
+                          <span>{amountFieldDef?.label ?? 'Amount'}</span>
+                          <span>Date</span>
+                        </div>
+                        {activeAppRecords.map((rec) => (
+                          <div
+                            key={rec.id}
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns: '2fr 1fr 1fr 1fr',
+                              padding: '9px 14px',
+                              borderBottom: '1px solid #18181c',
+                              fontSize: 12,
+                              alignItems: 'center',
+                            }}
+                          >
+                            <span style={{ fontWeight: 500 }}>
+                              {String(rec.fields.title ?? rec.id)}
+                            </span>
+                            <span style={{ color: '#a1a1aa', fontSize: 11 }}>
+                              {String(rec.fields.status ?? '')}
+                            </span>
+                            <span>
+                              {isCurrency
+                                ? `$${Number(rec.fields.amount ?? 0).toLocaleString()}`
+                                : Number(rec.fields.amount ?? 0).toLocaleString()}
+                            </span>
+                            <span style={{ color: '#71717a', fontSize: 11 }}>
+                              {String(rec.fields.dueDate ?? '—')}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Dynamic Calendar Component */}
+                    {hasCalendar && (
+                      <div
+                        style={{
+                          display: 'flex',
+                          gap: 10,
+                          overflowX: 'auto',
+                        }}
+                      >
+                        {activeAppRecords.map((rec) => (
+                          <div
+                            key={rec.id}
+                            style={{
+                              minWidth: 180,
+                              backgroundColor: '#131316',
+                              border: '1px solid #1f1f24',
+                              borderRadius: 10,
+                              padding: 10,
+                              fontSize: 11,
+                            }}
+                          >
+                            <div style={{ color: '#0088ff', fontWeight: 600 }}>
+                              {String(rec.fields.dueDate ?? '2026-09-18')}
+                            </div>
+                            <div style={{ marginTop: 4, color: '#e5e5e7', fontSize: 12 }}>
+                              {String(rec.fields.title ?? rec.id)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {codeTab === 'builder' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {previewDef.components.map((c) => (
+                        <span
+                          key={c.id}
+                          style={{
+                            padding: '5px 10px',
+                            borderRadius: 7,
+                            backgroundColor: '#131316',
+                            border: '1px solid #1f1f24',
+                            fontSize: 11,
+                            color: '#d4d4d8',
+                          }}
+                        >
+                          <strong style={{ color: '#0088ff' }}>{c.type}</strong> · {c.label ?? c.id}
+                        </span>
+                      ))}
+                    </div>
+
+                    <pre
+                      style={{
+                        backgroundColor: '#111113',
+                        border: '1px solid #1f1f24',
+                        borderRadius: 10,
+                        padding: 12,
+                        fontSize: 11,
+                        color: '#a1a1aa',
+                        overflowX: 'auto',
+                        maxHeight: 360,
+                      }}
+                    >
+                      {JSON.stringify(previewDef, null, 2)}
+                    </pre>
+                  </div>
+                )}
+
+                {codeTab === 'audit' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {auditEvents.map((ev) => (
+                      <div
+                        key={ev.id}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          padding: '6px 10px',
+                          backgroundColor: '#131316',
+                          borderRadius: 6,
                           fontSize: 11,
                           color: '#a1a1aa',
                         }}
                       >
-                        {c.type}: {c.label ?? c.id}
-                      </span>
+                        <span>
+                          {ev.action} · {ev.targetId}
+                        </span>
+                        <span style={{ color: '#52525b' }}>{ev.actor}</span>
+                      </div>
                     ))}
                   </div>
-                </div>
-              )}
-
-              {codeTab === 'audit' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {auditEvents.map((ev) => (
-                    <div
-                      key={ev.id}
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        padding: '6px 10px',
-                        backgroundColor: '#131316',
-                        borderRadius: 6,
-                        fontSize: 11,
-                        color: '#a1a1aa',
-                      }}
-                    >
-                      <span>
-                        {ev.action} · {ev.targetId}
-                      </span>
-                      <span style={{ color: '#52525b' }}>{ev.actor}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+                )}
+              </div>
+            );
+          })()}
 
           {/* =============================================================== */}
           {/* FLOATING BOTTOM-RIGHT MIC & + BUTTONS                           */}
