@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-INPUT_PROJECT="${1:-${GOOGLE_CLOUD_PROJECT:-402708876408}}"
+INPUT_PROJECT="${1:-${GOOGLE_CLOUD_PROJECT:-low-agent}}"
 REGION="${2:-${GOOGLE_CLOUD_REGION:-us-central1}}"
 SERVICE_NAME="low-web"
 
@@ -10,7 +10,6 @@ if [[ -z "$INPUT_PROJECT" ]]; then
   exit 1
 fi
 
-# If a numeric Project Number (like 402708876408) was supplied, resolve its string Project ID
 if [[ "$INPUT_PROJECT" =~ ^[0-9]+$ ]]; then
   echo "==> Resolving Project ID for Project Number: $INPUT_PROJECT..."
   PROJECT_ID="$(gcloud projects describe "$INPUT_PROJECT" --format='value(projectId)')"
@@ -18,18 +17,35 @@ else
   PROJECT_ID="$INPUT_PROJECT"
 fi
 
-echo "==> Configuring Google Cloud project: $PROJECT_ID (region: $REGION)"
+PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
+COMPUTE_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+
+echo "==> Configuring Google Cloud project: $PROJECT_ID (number: $PROJECT_NUMBER, region: $REGION)"
 gcloud config set project "$PROJECT_ID"
 
-echo "==> Enabling required Google Cloud APIs (Cloud Run, Cloud Build, Artifact Registry, Firestore, KMS, Secret Manager, Vertex AI)..."
+echo "==> Enabling required Google Cloud APIs..."
 gcloud services enable \
   run.googleapis.com \
   cloudbuild.googleapis.com \
   artifactregistry.googleapis.com \
+  storage.googleapis.com \
   firestore.googleapis.com \
   cloudkms.googleapis.com \
   secretmanager.googleapis.com \
   aiplatform.googleapis.com
+
+echo "==> Granting Cloud Build / Cloud Run source build IAM roles to $COMPUTE_SA..."
+for ROLE in \
+  roles/storage.admin \
+  roles/artifactregistry.writer \
+  roles/logging.logWriter \
+  roles/cloudbuild.builds.builder \
+  roles/run.builder; do
+  gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+    --member="serviceAccount:${COMPUTE_SA}" \
+    --role="$ROLE" \
+    --quiet >/dev/null
+done
 
 APPROVAL_SECRET="${LOW_APPROVAL_SECRET:-$(openssl rand -hex 32)}"
 
