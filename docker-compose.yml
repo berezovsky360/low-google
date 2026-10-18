@@ -1,0 +1,30 @@
+services:
+  firebase-emulator:
+    image: spine3/firebase-emulator:latest
+    ports:
+      - "4000:4000" # Emulator Suite UI
+      - "8085:8080" # Firestore Emulator
+      - "9099:9099" # Firebase Auth Emulator
+    environment:
+      - GCP_PROJECT=demo-low-project
+
+  low-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:8080"
+    environment:
+      - GOOGLE_CLOUD_PROJECT=demo-low-project
+      - GOOGLE_CLOUD_REGION=us-central1
+      - FIREBASE_PROJECT_ID=demo-low-project
+      - FIRESTORE_EMULATOR_HOST=firebase-emulator:8080
+      - FIREBASE_AUTH_EMULATOR_HOST=firebase-emulator:9099
+      - LOW_KMS_KEY_NAME=projects/demo-low-project/locations/us-central1/keyRings/low/cryptoKeys/data
+      - LOW_APPROVAL_SECRET=low-local-dev-approval-secret-32bytes
+      - LOW_REASONING_MODEL=gemini-2.5-flash
+      - LOW_TRANSCRIPTION_MODEL=gemini-2.5-flash
+      - LOW_EMBEDDING_MODEL=text-embedding-004
+      - LOW_STORAGE_BUCKET=low-local-bucket
+    depends_on:
+      - firebase-emulator

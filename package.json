@@ -1,0 +1,37 @@
+{
+  "name": "low-google",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "rebuild-derived": "tsx scripts/rebuild-derived.ts"
+  },
+  "dependencies": {
+    "@google-cloud/kms": "^4.4.0",
+    "@google-cloud/storage": "^7.14.0",
+    "@google/genai": "^2.30.0",
+    "archiver": "^7.0.1",
+    "firebase": "^11.1.0",
+    "firebase-admin": "^13.0.1",
+    "lucide-react": "^0.468.0",
+    "next": "^15.1.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-markdown": "^9.0.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/archiver": "^6.0.2",
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

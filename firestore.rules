@@ -1,0 +1,112 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null
+        && request.auth.token.orgId is string
+        && request.auth.token.orgId.size() > 0;
+    }
+
+    function isMemberOfOrg(orgId) {
+      return isAuthenticated() && request.auth.token.orgId == orgId;
+    }
+
+    function hasRole(orgId, allowedRoles) {
+      return isMemberOfOrg(orgId)
+        && request.auth.token.role is string
+        && request.auth.token.role in allowedRoles;
+    }
+
+    // Organization root document
+    match /organizations/{orgId} {
+      allow read: if isMemberOfOrg(orgId);
+      allow write: if false; // Managed exclusively through the server repository
+
+      // Organization members
+      match /members/{uid} {
+        allow read: if isMemberOfOrg(orgId);
+        allow write: if false; // Managed via server repository + custom claims
+      }
+
+      // Per-organization wrapped encryption keys: strictly server-only
+      match /keys/{version} {
+        allow read, write: if false;
+      }
+
+      // Documents (Markdown files and folders)
+      // Note: Document bodies are stored as AES-256-GCM ciphertext bound by AAD (orgId/docId).
+      // All mutations go through the server repository to enforce expectedVersion,
+      // envelope encryption, version history, and audit logging.
+      match /documents/{docId} {
+        allow read: if isMemberOfOrg(orgId);
+        allow write: if false;
+
+        match /versions/{versionNumber} {
+          allow read: if isMemberOfOrg(orgId);
+          allow write: if false;
+        }
+      }
+
+      // Derived chunks and embeddings for semantic search
+      match /chunks/{chunkId} {
+        allow read: if isMemberOfOrg(orgId);
+        allow write: if false;
+      }
+
+      // Knowledge collections
+      match /collections/{collectionId} {
+        allow read: if isMemberOfOrg(orgId);
+        allow write: if false;
+      }
+
+      // Internal business apps, immutable snapshots, and encrypted Markdown records
+      match /apps/{appId} {
+        allow read: if isMemberOfOrg(orgId);
+        allow write: if false;
+
+        match /snapshots/{snapshotNumber} {
+          allow read: if isMemberOfOrg(orgId);
+          allow update, delete: if false;
+          allow create: if false;
+        }
+
+        match /records/{recId} {
+          allow read: if isMemberOfOrg(orgId);
+          allow write: if false;
+        }
+      }
+
+      // Single-use HMAC approvals
+      match /approvals/{approvalId} {
+        allow read: if isMemberOfOrg(orgId);
+        allow write: if false;
+      }
+
+      // Append-only audit log: updates and deletes are strictly forbidden everywhere
+      match /audit/{eventId} {
+        allow read: if hasRole(orgId, ['owner', 'admin', 'member']);
+        allow create: if false;
+        allow update, delete: if false;
+      }
+
+      // Model and automation execution runs
+      match /runs/{runId} {
+        allow read: if isMemberOfOrg(orgId);
+        allow write: if false;
+      }
+
+      // Encrypted automation queue
+      match /queue/{itemId} {
+        allow read: if hasRole(orgId, ['owner', 'admin']);
+        allow write: if false;
+      }
+    }
+
+    // Deny all other paths by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

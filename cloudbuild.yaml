@@ -1,0 +1,36 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/low-web:$COMMIT_SHA'
+      - '.'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/low-web:$COMMIT_SHA'
+
+  # Deploy to Cloud Run with cold-start mitigation for Hackathon evaluation
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'low-web'
+      - '--image=gcr.io/$PROJECT_ID/low-web:$COMMIT_SHA'
+      - '--region=${_REGION}'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--min-instances=1'
+      - '--cpu-boost'
+      - '--timeout=300s'
+      - '--concurrency=80'
+      - '--set-secrets=LOW_APPROVAL_SECRET=low-approval-secret:latest'
+      - '--set-env-vars=GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_REGION=${_REGION},FIREBASE_PROJECT_ID=$PROJECT_ID,LOW_REASONING_MODEL=${_REASONING_MODEL},LOW_TRANSCRIPTION_MODEL=${_TRANSCRIPTION_MODEL},LOW_EMBEDDING_MODEL=${_EMBEDDING_MODEL}'
+
+substitutions:
+  _REGION: us-central1
+  _REASONING_MODEL: gemini-2.5-flash
+  _TRANSCRIPTION_MODEL: gemini-2.5-flash
+  _EMBEDDING_MODEL: text-embedding-004
