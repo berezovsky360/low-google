@@ -112,12 +112,7 @@ export async function POST(req: NextRequest) {
     switch (payload.operation) {
       case 'configure_models': {
         modelProvider.configureRuntime({
-          provider: data.provider as
-            | 'gemini'
-            | 'vertex'
-            | 'openai'
-            | 'anthropic'
-            | undefined,
+          provider: data.provider as 'gemini' | 'vertex' | undefined,
           modelId: data.modelId ? String(data.modelId) : undefined,
           apiKey: data.apiKey !== undefined ? String(data.apiKey) : undefined,
         });
@@ -238,12 +233,7 @@ export async function POST(req: NextRequest) {
       case 'ask_memory': {
         if (data.provider || data.modelId || data.apiKey !== undefined) {
           modelProvider.configureRuntime({
-            provider: data.provider as
-              | 'gemini'
-              | 'vertex'
-              | 'openai'
-              | 'anthropic'
-              | undefined,
+            provider: data.provider as 'gemini' | 'vertex' | undefined,
             modelId: data.modelId ? String(data.modelId) : undefined,
             apiKey: data.apiKey !== undefined ? String(data.apiKey) : undefined,
           });

@@ -285,7 +285,7 @@ export class GeminiTranscriber implements Transcriber {
 
 export class GeminiModelProvider implements ModelProvider {
   private modelId: string;
-  private provider: 'gemini' | 'vertex' | 'openai' | 'anthropic' = 'gemini';
+  private provider: 'gemini' | 'vertex' = 'gemini';
   private apiKey: string | undefined;
   private client: GoogleGenAI | null;
 
@@ -300,30 +300,26 @@ export class GeminiModelProvider implements ModelProvider {
   }
 
   public configureRuntime(opts: {
-    provider?: 'gemini' | 'vertex' | 'openai' | 'anthropic';
+    provider?: 'gemini' | 'vertex';
     modelId?: string;
     apiKey?: string;
   }): void {
-    if (opts.provider) {
+    if (opts.provider === 'gemini' || opts.provider === 'vertex') {
       this.provider = opts.provider;
     }
     if (opts.modelId) {
-      this.modelId = opts.modelId;
+      this.modelId = opts.modelId.startsWith('gemini')
+        ? opts.modelId
+        : 'gemini-2.5-flash';
     }
     if (opts.apiKey !== undefined) {
       this.apiKey = opts.apiKey.trim() || undefined;
     }
-    if (this.provider === 'gemini' || this.provider === 'vertex') {
-      const geminiModel = this.modelId.startsWith('gemini')
-        ? this.modelId
-        : 'gemini-2.5-flash';
-      this.modelId = geminiModel;
-      this.client = createGenAiClient(this.apiKey);
-    }
+    this.client = createGenAiClient(this.apiKey);
   }
 
   public getRuntimeConfig(): {
-    provider: 'gemini' | 'vertex' | 'openai' | 'anthropic';
+    provider: 'gemini' | 'vertex';
     modelId: string;
     hasApiKey: boolean;
   } {
@@ -360,102 +356,7 @@ export class GeminiModelProvider implements ModelProvider {
       )
       .join('\n\n');
 
-    // 1. OpenAI Provider (GPT-4o / GPT-4o-mini)
-    if (this.provider === 'openai' && this.apiKey && params.chunks.length > 0) {
-      try {
-        const res = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.apiKey}`,
-          },
-          body: JSON.stringify({
-            model: this.modelId.startsWith('gpt') ? this.modelId : 'gpt-4o-mini',
-            temperature: 0,
-            response_format: { type: 'json_object' },
-            messages: [
-              {
-                role: 'system',
-                content:
-                  'Return JSON: {"answerMarkdown": string, "notFound": boolean, "citations": [{"docId": string, "paragraphOrdinal": number}]}. Answer from the provided chunks.',
-              },
-              {
-                role: 'user',
-                content: `Question: ${params.question}\n\nChunks:\n${contextBlock}`,
-              },
-            ],
-          }),
-        });
-        if (res.ok) {
-          const data = (await res.json()) as {
-            choices?: Array<{ message?: { content?: string } }>;
-          };
-          const content = data.choices?.[0]?.message?.content;
-          if (content) {
-            const parsed = JSON.parse(content) as {
-              answerMarkdown: string;
-              notFound: boolean;
-              citations: Array<{ docId: string; paragraphOrdinal: number }>;
-            };
-            return {
-              ...parsed,
-              model: this.modelId,
-              tokensUsed: Math.ceil(content.length / 4),
-            };
-          }
-        }
-      } catch {
-        // Fallback below
-      }
-    }
-
-    // 2. Anthropic Provider (Claude 3.7 Sonnet / Haiku)
-    if (this.provider === 'anthropic' && this.apiKey && params.chunks.length > 0) {
-      try {
-        const res = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': this.apiKey,
-            'anthropic-version': '2023-06-01',
-          },
-          body: JSON.stringify({
-            model: this.modelId.startsWith('claude')
-              ? this.modelId
-              : 'claude-3-7-sonnet-latest',
-            max_tokens: 800,
-            messages: [
-              {
-                role: 'user',
-                content: `Answer this question using ONLY the provided chunks and cite sources:\nQuestion: ${params.question}\n\nChunks:\n${contextBlock}`,
-              },
-            ],
-          }),
-        });
-        if (res.ok) {
-          const data = (await res.json()) as {
-            content?: Array<{ text?: string }>;
-          };
-          const text = data.content?.[0]?.text;
-          if (text) {
-            return {
-              answerMarkdown: text,
-              notFound: false,
-              citations: params.chunks.slice(0, 2).map((c) => ({
-                docId: c.docId,
-                paragraphOrdinal: c.ordinal,
-              })),
-              model: this.modelId,
-              tokensUsed: Math.ceil(text.length / 4),
-            };
-          }
-        }
-      } catch {
-        // Fallback below
-      }
-    }
-
-    // 3. Google Gemini / Vertex AI Provider
+    // Google Gemini API / Google Cloud Vertex AI Provider
     if (this.client && params.chunks.length > 0) {
       try {
         const response = await withRetryOn503(() =>

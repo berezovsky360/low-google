@@ -237,9 +237,9 @@ export default function LowWorkspacePage() {
   const [appChatInput, setAppChatInput] = useState('');
   const [appChatReply, setAppChatReply] = useState<string | null>(null);
 
-  // Modals & Neural Network Config
+  // Modals & Google Gemini / Vertex AI Model Config
   const [modelModalOpen, setModelModalOpen] = useState(false);
-  const [nnProvider, setNnProvider] = useState<'gemini' | 'vertex' | 'openai' | 'anthropic'>('gemini');
+  const [nnProvider, setNnProvider] = useState<'gemini' | 'vertex'>('gemini');
   const [nnModel, setNnModel] = useState('gemini-2.5-flash');
   const [nnApiKey, setNnApiKey] = useState('');
   const [mcpModalOpen, setMcpModalOpen] = useState(false);
@@ -3802,7 +3802,7 @@ export default function LowWorkspacePage() {
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: 13, fontWeight: 600 }}>Neural Networks & AI Models</span>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>Google Gemini & Vertex AI Models</span>
               <button
                 onClick={() => setModelModalOpen(false)}
                 style={{ background: 'none', border: 'none', color: '#8e8e93', cursor: 'pointer' }}
@@ -3811,14 +3811,12 @@ export default function LowWorkspacePage() {
               </button>
             </div>
 
-            {/* Provider Selector */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+            {/* Google Provider Selector */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6 }}>
               {(
                 [
-                  { id: 'gemini', label: 'Gemini', defaultModel: 'gemini-2.5-flash' },
-                  { id: 'vertex', label: 'Vertex AI', defaultModel: 'gemini-2.5-flash' },
-                  { id: 'openai', label: 'OpenAI', defaultModel: 'gpt-4o' },
-                  { id: 'anthropic', label: 'Claude', defaultModel: 'claude-3-7-sonnet-latest' },
+                  { id: 'gemini', label: 'Google Gemini API', defaultModel: 'gemini-2.5-flash' },
+                  { id: 'vertex', label: 'Google Cloud Vertex AI', defaultModel: 'gemini-2.5-flash' },
                 ] as const
               ).map((p) => (
                 <button
@@ -3843,30 +3841,27 @@ export default function LowWorkspacePage() {
               ))}
             </div>
 
-            {/* Model Presets */}
+            {/* Google Gemini Model Presets */}
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {(nnProvider === 'openai'
-                ? ['gpt-4o', 'gpt-4o-mini']
-                : nnProvider === 'anthropic'
-                ? ['claude-3-7-sonnet-latest', 'claude-3-5-haiku-latest']
-                : ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash']
-              ).map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setNnModel(m)}
-                  style={{
-                    padding: '5px 10px',
-                    borderRadius: 7,
-                    border: '1px solid #27272a',
-                    backgroundColor: nnModel === m ? '#27272a' : '#18181c',
-                    color: nnModel === m ? '#60a5fa' : '#8e8e93',
-                    fontSize: 11,
-                    cursor: 'pointer',
-                  }}
-                >
-                  {m}
-                </button>
-              ))}
+              {['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-pro'].map(
+                (m) => (
+                  <button
+                    key={m}
+                    onClick={() => setNnModel(m)}
+                    style={{
+                      padding: '5px 10px',
+                      borderRadius: 7,
+                      border: '1px solid #27272a',
+                      backgroundColor: nnModel === m ? '#27272a' : '#18181c',
+                      color: nnModel === m ? '#60a5fa' : '#8e8e93',
+                      fontSize: 11,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {m}
+                  </button>
+                )
+              )}
             </div>
 
             {/* API Key Input */}
@@ -3876,8 +3871,8 @@ export default function LowWorkspacePage() {
               onChange={(e) => setNnApiKey(e.target.value)}
               placeholder={
                 nnProvider === 'vertex'
-                  ? 'Uses Cloud Run IAM Service Account (or paste API key)...'
-                  : `Paste ${nnProvider.toUpperCase()} API Key (optional for built-in mode)...`
+                  ? 'Uses Google Cloud Run IAM Service Account (or paste Gemini API key)...'
+                  : 'Paste GEMINI_API_KEY (optional for built-in deterministic grounding)...'
               }
               style={{
                 backgroundColor: '#1c1c21',
