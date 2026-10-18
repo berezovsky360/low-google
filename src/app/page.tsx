@@ -226,7 +226,7 @@ export default function LowWorkspacePage() {
 
   // App Builder & UX/UI Studio
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
-  const [codeTab, setCodeTab] = useState<'app' | 'builder' | 'audit'>('app');
+  const [codeTab, setCodeTab] = useState<'app' | 'marketplace' | 'builder' | 'audit'>('app');
   const [builderInstruction, setBuilderInstruction] = useState('');
   const [proposedDiff, setProposedDiff] = useState<BuilderDiffItem | null>(null);
   const [newDealTitle, setNewDealTitle] = useState('');
@@ -2238,25 +2238,26 @@ export default function LowWorkspacePage() {
                   gap: 14,
                 }}
               >
-                {/* Row 1: App Switcher + New App Presets + Actions */}
+                {/* Minimalist Single-Row Studio Bar */}
                 <div
                   style={{
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    gap: 10,
+                    gap: 8,
                     flexWrap: 'wrap',
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                     {apps.map((appItem) => {
-                      const isSelected = appItem.id === activeApp.id;
+                      const isSelected = codeTab !== 'marketplace' && appItem.id === activeApp.id;
                       return (
                         <button
                           key={appItem.id}
                           onClick={() => {
                             setSelectedAppId(appItem.id);
                             setProposedDiff(null);
+                            if (codeTab === 'marketplace') setCodeTab('app');
                           }}
                           style={{
                             backgroundColor: isSelected ? '#0088ff' : '#131316',
@@ -2273,84 +2274,37 @@ export default function LowWorkspacePage() {
                         </button>
                       );
                     })}
-
-                    {[
-                      { label: '+ CRM', prompt: 'Customer CRM & Deal Pipeline' },
-                      { label: '+ Inventory', prompt: 'Inventory & Stock Manager' },
-                      { label: '+ Tracker', prompt: 'Project & Operations Tracker' },
-                    ].map((preset) => (
-                      <button
-                        key={preset.label}
-                        onClick={() => void handleCreateAppFromPrompt(preset.prompt)}
-                        style={{
-                          backgroundColor: 'transparent',
-                          border: '1px dashed #27272a',
-                          borderRadius: 8,
-                          padding: '5px 9px',
-                          fontSize: 11,
-                          color: '#71717a',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        {preset.label}
-                      </button>
-                    ))}
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                    {(['app', 'builder', 'audit'] as const).map((tab) => (
+                    {(
+                      [
+                        { id: 'app', label: 'App' },
+                        { id: 'marketplace', label: 'Marketplace' },
+                        { id: 'builder', label: 'Builder' },
+                        {
+                          id: 'audit',
+                          label: `Audit (${uxChecks.filter((c) => c.passed).length}/6)`,
+                        },
+                      ] as const
+                    ).map((tab) => (
                       <button
-                        key={tab}
-                        onClick={() => setCodeTab(tab)}
+                        key={tab.id}
+                        onClick={() => setCodeTab(tab.id)}
                         style={{
-                          backgroundColor: codeTab === tab ? '#1f1f24' : 'transparent',
+                          backgroundColor: codeTab === tab.id ? '#1f1f24' : 'transparent',
                           border: '1px solid #222226',
                           borderRadius: 8,
                           padding: '5px 10px',
                           fontSize: 11,
-                          color: codeTab === tab ? '#f4f4f6' : '#8e8e93',
+                          color: codeTab === tab.id ? '#f4f4f6' : '#8e8e93',
+                          fontWeight: codeTab === tab.id ? 600 : 400,
                           cursor: 'pointer',
-                          textTransform: 'capitalize',
                         }}
                       >
-                        {tab === 'audit' ? `Audit (${uxChecks.filter((c) => c.passed).length}/6)` : tab}
+                        {tab.label}
                       </button>
                     ))}
-
-                    <button
-                      onClick={() => void handleRunAutomationJob(activeApp.id)}
-                      style={{
-                        backgroundColor: '#131316',
-                        border: '1px solid #222226',
-                        borderRadius: 8,
-                        padding: '5px 10px',
-                        fontSize: 11,
-                        color: '#a1a1aa',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 4,
-                      }}
-                    >
-                      <Play size={11} />
-                      <span>Run</span>
-                    </button>
-
-                    <button
-                      onClick={() => void handlePublishApp(activeApp)}
-                      style={{
-                        backgroundColor: '#0088ff',
-                        color: '#ffffff',
-                        border: 'none',
-                        borderRadius: 8,
-                        padding: '5px 11px',
-                        fontSize: 11,
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      Publish v{activeApp.publishedSnapshotVersion ?? 1}
-                    </button>
 
                     <button
                       onClick={() => {
@@ -2374,42 +2328,29 @@ export default function LowWorkspacePage() {
                       }}
                     >
                       <Link2 size={12} />
-                      <span>Guest Link</span>
+                      <span>Share</span>
                     </button>
 
                     <button
-                      onClick={() =>
-                        window.open(
-                          `/api/export?orgId=${encodeURIComponent(
-                            currentTenant.orgId
-                          )}&uid=${encodeURIComponent(
-                            currentTenant.uid
-                          )}&role=${encodeURIComponent(currentTenant.role)}`,
-                          '_blank'
-                        )
-                      }
-                      title="Export portable .zip & Docker self-host kit"
+                      onClick={() => void handlePublishApp(activeApp)}
                       style={{
-                        backgroundColor: '#131316',
-                        border: '1px solid #222226',
+                        backgroundColor: '#0088ff',
+                        color: '#ffffff',
+                        border: 'none',
                         borderRadius: 8,
-                        padding: '5px 10px',
+                        padding: '5px 11px',
                         fontSize: 11,
-                        color: '#e5e5e7',
+                        fontWeight: 600,
                         cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 5,
                       }}
                     >
-                      <Download size={12} />
-                      <span>Self-Host .zip</span>
+                      Publish v{activeApp.publishedSnapshotVersion ?? 1}
                     </button>
                   </div>
                 </div>
 
-                {/* Row 2: Minimalist Agent Prompt, Component Palette & UX/UI Controls */}
-                {previewViewport !== 'guest' && (
+                {/* Builder Controls: Only visible when in 'builder' tab */}
+                {codeTab === 'builder' && previewViewport !== 'guest' && (
                   <div
                     style={{
                       backgroundColor: '#111114',
@@ -2428,7 +2369,7 @@ export default function LowWorkspacePage() {
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') void handleProposeDiff(activeApp.id);
                         }}
-                        placeholder="Agent prompt: 'Add agent chat', 'Add average metric and table', 'Build Inventory'..."
+                        placeholder="Gemini Builder prompt: 'Add agent chat', 'Add average metric', 'Build Inventory'..."
                         style={{
                           flex: 1,
                           backgroundColor: '#18181c',
@@ -2470,7 +2411,6 @@ export default function LowWorkspacePage() {
                       </button>
                     </div>
 
-                    {/* Quick Component Chips + UX/UI Theme & Viewport Toggles */}
                     <div
                       style={{
                         display: 'flex',
@@ -2487,8 +2427,6 @@ export default function LowWorkspacePage() {
                           { label: '+ Table', instruction: 'Add table grid' },
                           { label: '+ Calendar', instruction: 'Add calendar schedule' },
                           { label: '+ Agent Chat', instruction: 'Add agent chat assistant' },
-                          { label: 'CRM Layout', instruction: 'Transform into Sales CRM pipeline' },
-                          { label: 'Inventory Layout', instruction: 'Transform into Inventory & Stock Manager' },
                         ].map((chip) => (
                           <button
                             key={chip.label}
@@ -2508,7 +2446,6 @@ export default function LowWorkspacePage() {
                         ))}
                       </div>
 
-                      {/* UX/UI Theme, Animation & Viewport Inspector */}
                       <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
                         {(['obsidian', 'cyber', 'glass', 'light'] as const).map((t) => (
                           <button
@@ -2852,8 +2789,8 @@ export default function LowWorkspacePage() {
                       </div>
                     )}
 
-                    {/* Dynamic Table Component */}
-                    {hasTable && (
+                    {/* Dynamic Table Component (shown when Kanban is not present) */}
+                    {hasTable && !hasKanban && (
                       <div style={{ ...cardStyle, overflow: 'hidden' }}>
                         <div
                           style={{
@@ -2903,59 +2840,18 @@ export default function LowWorkspacePage() {
                       </div>
                     )}
 
-                    {/* Dynamic Calendar Component */}
-                    {hasCalendar && (
-                      <div
-                        style={{
-                          display: 'flex',
-                          gap: 10,
-                          overflowX: 'auto',
-                        }}
-                      >
-                        {activeAppRecords.map((rec) => (
-                          <div
-                            key={rec.id}
-                            style={{
-                              ...cardStyle,
-                              minWidth: 180,
-                              padding: 10,
-                              fontSize: 11,
-                            }}
-                          >
-                            <div style={{ color: themePalette.accent, fontWeight: 600 }}>
-                              {String(rec.fields.dueDate ?? '2026-09-18')}
-                            </div>
-                            <div style={{ marginTop: 4, fontSize: 12 }}>
-                              {String(rec.fields.title ?? rec.id)}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Dynamic Embedded Agent Chat Component */}
+                    {/* Compact Embedded Gemini Agent Chat */}
                     {hasAgentChat && (
                       <div
                         style={{
                           ...cardStyle,
-                          padding: 14,
+                          padding: '10px 12px',
                           display: 'flex',
                           flexDirection: 'column',
-                          gap: 10,
+                          gap: 8,
                         }}
                       >
-                        <div
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            fontSize: 11,
-                            opacity: 0.7,
-                          }}
-                        >
-                          <span>Embedded App Agent Chat</span>
-                          <span>Grounded in Vault Memory</span>
-                        </div>
-                        <div style={{ display: 'flex', gap: 8 }}>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                           <input
                             value={appChatInput}
                             onChange={(e) => setAppChatInput(e.target.value)}
@@ -2978,14 +2874,14 @@ export default function LowWorkspacePage() {
                                 }
                               }
                             }}
-                            placeholder="Ask embedded agent about deals, inventory, or policies..."
+                            placeholder="Ask Gemini Agent about this app..."
                             style={{
                               flex: 1,
                               backgroundColor: themePalette.subCardBg,
                               color: themePalette.text,
                               border: 'none',
                               borderRadius: 8,
-                              padding: '8px 12px',
+                              padding: '7px 12px',
                               fontSize: 12,
                               outline: 'none',
                             }}
@@ -3014,7 +2910,7 @@ export default function LowWorkspacePage() {
                               color: '#ffffff',
                               border: 'none',
                               borderRadius: 8,
-                              padding: '0 14px',
+                              padding: '7px 12px',
                               cursor: 'pointer',
                               display: 'flex',
                               alignItems: 'center',
@@ -3030,6 +2926,129 @@ export default function LowWorkspacePage() {
                         )}
                       </div>
                     )}
+                  </div>
+                )}
+
+                {codeTab === 'marketplace' && (
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(3, 1fr)',
+                      gap: 12,
+                    }}
+                  >
+                    {[
+                      {
+                        title: 'Enterprise Deal & Approval CRM',
+                        category: 'CRM',
+                        tags: 'Kanban · KPI · HMAC Gate',
+                        matchId: 'app-crm-approvals',
+                        prompt: 'Customer CRM & Deal Pipeline',
+                      },
+                      {
+                        title: 'Inventory & Stock Manager',
+                        category: 'Operations',
+                        tags: 'Stock Levels · Reorder · Table',
+                        matchId: 'app-inventory',
+                        prompt: 'Inventory & Stock Manager',
+                      },
+                      {
+                        title: 'AI Sprint & Bug Tracker',
+                        category: 'Engineering',
+                        tags: 'Triage · Sprint Board · SLA',
+                        matchId: '',
+                        prompt: 'Project & Operations Tracker',
+                      },
+                      {
+                        title: 'Client Onboarding & KYC Portal',
+                        category: 'Compliance',
+                        tags: 'Checklist · Risk Approval · Chat',
+                        matchId: '',
+                        prompt: 'Client Onboarding & KYC Compliance Tracker',
+                      },
+                      {
+                        title: 'Finance & Burn Rate Ledger',
+                        category: 'Finance',
+                        tags: 'Budget · Vendor Spend · KPI',
+                        matchId: '',
+                        prompt: 'Finance & Budget Approval Tracker',
+                      },
+                      {
+                        title: 'Talent & Recruiting Pipeline',
+                        category: 'People',
+                        tags: 'Candidates · Offer Gate · Kanban',
+                        matchId: '',
+                        prompt: 'Recruiting & Candidate Pipeline CRM',
+                      },
+                    ].map((tpl) => {
+                      const existing = apps.find(
+                        (a) =>
+                          (tpl.matchId && a.id === tpl.matchId) ||
+                          a.draftDefinition.name.toLowerCase() === tpl.title.toLowerCase()
+                      );
+                      return (
+                        <div
+                          key={tpl.title}
+                          style={{
+                            backgroundColor: '#131316',
+                            border: '1px solid #1f1f24',
+                            borderRadius: 12,
+                            padding: 16,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: 'space-between',
+                            gap: 14,
+                          }}
+                        >
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span
+                                style={{
+                                  fontSize: 10,
+                                  fontWeight: 600,
+                                  color: '#60a5fa',
+                                  backgroundColor: '#161f30',
+                                  padding: '2px 7px',
+                                  borderRadius: 5,
+                                }}
+                              >
+                                {tpl.category}
+                              </span>
+                              <span style={{ fontSize: 10, color: '#71717a' }}>Gemini Ready</span>
+                            </div>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: '#f4f4f6', marginTop: 2 }}>
+                              {tpl.title}
+                            </div>
+                            <div style={{ fontSize: 11, color: '#71717a' }}>{tpl.tags}</div>
+                          </div>
+
+                          <button
+                            onClick={async () => {
+                              if (existing) {
+                                setSelectedAppId(existing.id);
+                                setCodeTab('app');
+                              } else {
+                                await handleCreateAppFromPrompt(tpl.prompt);
+                                setCodeTab('app');
+                              }
+                            }}
+                            style={{
+                              width: '100%',
+                              backgroundColor: existing ? '#1c1c21' : '#0088ff',
+                              color: '#ffffff',
+                              border: existing ? '1px solid #2c2c32' : 'none',
+                              borderRadius: 8,
+                              padding: '7px 0',
+                              fontSize: 11,
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {existing ? 'Open App' : 'Use Ready App'}
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
 
