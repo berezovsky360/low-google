@@ -53,6 +53,54 @@ const TOOLS = [
       required: ['name', 'body'],
     },
   },
+  {
+    name: 'low_list_apps',
+    description: 'List all LOW No-Code Apps (CRM, Inventory, etc.) and their live records.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'low_create_app_record',
+    description: 'Create a new encrypted Markdown record inside a LOW App (e.g. CRM deal or Inventory SKU).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        appId: {
+          type: 'string',
+          description: 'Target App ID (e.g. app-crm-approvals or app-inventory)',
+        },
+        title: {
+          type: 'string',
+          description: 'Record title / deal name / SKU',
+        },
+        status: {
+          type: 'string',
+          description: 'Status stage (e.g. Draft, In Stock, Low Stock)',
+        },
+        amount: {
+          type: 'number',
+          description: 'Numeric value or quantity',
+        },
+      },
+      required: ['appId', 'title'],
+    },
+  },
+  {
+    name: 'low_build_app',
+    description: 'Create a new LOW No-Code App & Dashboard from a prompt.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        prompt: {
+          type: 'string',
+          description: 'App blueprint prompt (e.g. Customer Support Tracker)',
+        },
+      },
+      required: ['prompt'],
+    },
+  },
 ];
 
 export async function POST(req: NextRequest) {
@@ -60,7 +108,7 @@ export async function POST(req: NextRequest) {
     const actor = resolveActor(req);
     const container = getServerContainer();
     await container.ensureSeeded();
-    const { store, memoryService } = container;
+    const { store, memoryService, builderAgentService } = container;
 
     const msg = (await req.json()) as {
       id?: string | number | null;
@@ -75,7 +123,7 @@ export async function POST(req: NextRequest) {
         result: {
           protocolVersion: '2025-03-26',
           capabilities: { tools: {} },
-          serverInfo: { name: 'low-memory-mcp', version: '1.0.0' },
+          serverInfo: { name: 'low-memory-mcp', version: '1.1.0' },
         },
       });
     }
@@ -121,7 +169,7 @@ export async function POST(req: NextRequest) {
       if (toolName === 'low_save_memory') {
         const doc = await store.createDocument(actor, {
           kind: 'file',
-          name: String(args.name ?? 'antigravity-note.md'),
+          name: String(args.name ?? 'agent-note.md'),
           parentId: 'folder-test',
           body: String(args.body ?? ''),
           language: 'en',
@@ -132,6 +180,62 @@ export async function POST(req: NextRequest) {
           id: msg.id ?? null,
           result: {
             content: [{ type: 'text', text: JSON.stringify(doc, null, 2) }],
+          },
+        });
+      }
+
+      if (toolName === 'low_list_apps') {
+        const apps = await store.listApps(actor);
+        const out = [];
+        for (const app of apps) {
+          const records = await store.listAppRecords(actor, app.id, false);
+          out.push({
+            id: app.id,
+            name: app.draftDefinition.name,
+            status: app.status,
+            version: app.version,
+            records,
+          });
+        }
+        return NextResponse.json({
+          jsonrpc: '2.0',
+          id: msg.id ?? null,
+          result: {
+            content: [{ type: 'text', text: JSON.stringify(out, null, 2) }],
+          },
+        });
+      }
+
+      if (toolName === 'low_create_app_record') {
+        const rec = await store.createAppRecord(actor, {
+          appId: String(args.appId ?? 'app-crm-approvals'),
+          fields: {
+            title: String(args.title ?? 'New Item'),
+            status: String(args.status ?? 'Draft'),
+            amount: Number(args.amount ?? 0),
+            dueDate: new Date().toISOString().slice(0, 10),
+          },
+          notesMarkdown: '',
+        });
+        return NextResponse.json({
+          jsonrpc: '2.0',
+          id: msg.id ?? null,
+          result: {
+            content: [{ type: 'text', text: JSON.stringify(rec, null, 2) }],
+          },
+        });
+      }
+
+      if (toolName === 'low_build_app') {
+        const definition = builderAgentService.createDefinitionFromPrompt(
+          String(args.prompt ?? 'Custom Agent App')
+        );
+        const app = await store.saveAppDraft(actor, { definition });
+        return NextResponse.json({
+          jsonrpc: '2.0',
+          id: msg.id ?? null,
+          result: {
+            content: [{ type: 'text', text: JSON.stringify(app, null, 2) }],
           },
         });
       }

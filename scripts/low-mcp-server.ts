@@ -31,7 +31,7 @@ async function callLowOperation(
 
   const container = getServerContainer();
   await container.ensureSeeded();
-  const { store, memoryService } = container;
+  const { store, memoryService, builderAgentService } = container;
 
   if (operation === 'list_documents') {
     return store.listDocuments(DEFAULT_ACTOR, { includeDeleted: false });
@@ -46,13 +46,41 @@ async function callLowOperation(
   if (operation === 'create_document') {
     const doc = await store.createDocument(DEFAULT_ACTOR, {
       kind: 'file',
-      name: String(data?.name ?? 'antigravity-note.md'),
+      name: String(data?.name ?? 'agent-note.md'),
       parentId: (data?.parentId as string | null) ?? 'folder-test',
       body: String(data?.body ?? ''),
       language: 'en',
     });
     await memoryService.indexDocument(DEFAULT_ACTOR, doc);
     return doc;
+  }
+  if (operation === 'list_apps') {
+    const apps = await store.listApps(DEFAULT_ACTOR);
+    const result = [];
+    for (const app of apps) {
+      const records = await store.listAppRecords(DEFAULT_ACTOR, app.id, false);
+      result.push({
+        id: app.id,
+        name: app.draftDefinition.name,
+        status: app.status,
+        version: app.version,
+        records,
+      });
+    }
+    return result;
+  }
+  if (operation === 'create_app_record') {
+    return store.createAppRecord(DEFAULT_ACTOR, {
+      appId: String(data?.appId ?? 'app-crm-approvals'),
+      fields: (data?.fields as Record<string, string | number | null>) ?? {},
+      notesMarkdown: String(data?.notesMarkdown ?? ''),
+    });
+  }
+  if (operation === 'create_app_from_prompt') {
+    const definition = builderAgentService.createDefinitionFromPrompt(
+      String(data?.prompt ?? 'Custom Agent App')
+    );
+    return store.saveAppDraft(DEFAULT_ACTOR, { definition });
   }
   throw new Error(`Unsupported operation: ${operation}`);
 }
@@ -100,6 +128,54 @@ const TOOLS = [
       required: ['name', 'body'],
     },
   },
+  {
+    name: 'low_list_apps',
+    description: 'List all LOW No-Code Apps (CRM, Inventory, etc.) and their live records.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'low_create_app_record',
+    description: 'Create a new encrypted Markdown record inside a LOW App (e.g. CRM deal or Inventory SKU).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        appId: {
+          type: 'string',
+          description: 'Target App ID (e.g. app-crm-approvals or app-inventory)',
+        },
+        title: {
+          type: 'string',
+          description: 'Record title / deal name / SKU',
+        },
+        status: {
+          type: 'string',
+          description: 'Status stage (e.g. Draft, In Stock, Low Stock)',
+        },
+        amount: {
+          type: 'number',
+          description: 'Numeric value or quantity',
+        },
+      },
+      required: ['appId', 'title'],
+    },
+  },
+  {
+    name: 'low_build_app',
+    description: 'Create a new LOW No-Code App & Dashboard from a prompt.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        prompt: {
+          type: 'string',
+          description: 'App blueprint prompt (e.g. Customer Support Tracker)',
+        },
+      },
+      required: ['prompt'],
+    },
+  },
 ];
 
 const rl = readline.createInterface({
@@ -130,7 +206,7 @@ rl.on('line', async (line) => {
       sendResponse(msg.id ?? null, {
         protocolVersion: '2024-11-05',
         capabilities: { tools: {} },
-        serverInfo: { name: 'low-memory-mcp', version: '1.0.0' },
+        serverInfo: { name: 'low-memory-mcp', version: '1.1.0' },
       });
       return;
     }
@@ -159,25 +235,6 @@ rl.on('line', async (line) => {
       }
 
       if (toolName === 'low_list_documents') {
-        if (REMOTE_API_URL) {
-          const res = await fetch(`${REMOTE_API_URL}/api/low`, {
-            headers: {
-              'x-low-uid': DEFAULT_ACTOR.uid,
-              'x-low-org-id': DEFAULT_ACTOR.orgId,
-              'x-low-role': DEFAULT_ACTOR.role,
-            },
-          });
-          const data = (await res.json()) as { documents?: unknown[] };
-          sendResponse(msg.id ?? null, {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify(data.documents ?? [], null, 2),
-              },
-            ],
-          });
-          return;
-        }
         const docs = await callLowOperation('list_documents');
         sendResponse(msg.id ?? null, {
           content: [{ type: 'text', text: JSON.stringify(docs, null, 2) }],
@@ -192,6 +249,40 @@ rl.on('line', async (line) => {
         });
         sendResponse(msg.id ?? null, {
           content: [{ type: 'text', text: JSON.stringify(doc, null, 2) }],
+        });
+        return;
+      }
+
+      if (toolName === 'low_list_apps') {
+        const apps = await callLowOperation('list_apps');
+        sendResponse(msg.id ?? null, {
+          content: [{ type: 'text', text: JSON.stringify(apps, null, 2) }],
+        });
+        return;
+      }
+
+      if (toolName === 'low_create_app_record') {
+        const rec = await callLowOperation('create_app_record', {
+          appId: String(args.appId ?? 'app-crm-approvals'),
+          fields: {
+            title: String(args.title ?? 'New Item'),
+            status: String(args.status ?? 'Draft'),
+            amount: Number(args.amount ?? 0),
+            dueDate: new Date().toISOString().slice(0, 10),
+          },
+        });
+        sendResponse(msg.id ?? null, {
+          content: [{ type: 'text', text: JSON.stringify(rec, null, 2) }],
+        });
+        return;
+      }
+
+      if (toolName === 'low_build_app') {
+        const app = await callLowOperation('create_app_from_prompt', {
+          prompt: String(args.prompt ?? 'Custom App'),
+        });
+        sendResponse(msg.id ?? null, {
+          content: [{ type: 'text', text: JSON.stringify(app, null, 2) }],
         });
         return;
       }
