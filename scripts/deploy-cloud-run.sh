@@ -1,13 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROJECT_ID="${1:-${GOOGLE_CLOUD_PROJECT:-}}"
+INPUT_PROJECT="${1:-${GOOGLE_CLOUD_PROJECT:-402708876408}}"
 REGION="${2:-${GOOGLE_CLOUD_REGION:-us-central1}}"
 SERVICE_NAME="low-web"
 
-if [[ -z "$PROJECT_ID" ]]; then
-  echo "Usage: ./scripts/deploy-cloud-run.sh <GOOGLE_CLOUD_PROJECT_ID> [REGION]"
+if [[ -z "$INPUT_PROJECT" ]]; then
+  echo "Usage: ./scripts/deploy-cloud-run.sh <PROJECT_ID_OR_NUMBER> [REGION]"
   exit 1
+fi
+
+# If a numeric Project Number (like 402708876408) was supplied, resolve its string Project ID
+if [[ "$INPUT_PROJECT" =~ ^[0-9]+$ ]]; then
+  echo "==> Resolving Project ID for Project Number: $INPUT_PROJECT..."
+  PROJECT_ID="$(gcloud projects describe "$INPUT_PROJECT" --format='value(projectId)')"
+else
+  PROJECT_ID="$INPUT_PROJECT"
 fi
 
 echo "==> Configuring Google Cloud project: $PROJECT_ID (region: $REGION)"
