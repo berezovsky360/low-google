@@ -1195,18 +1195,36 @@ export default function LowWorkspacePage() {
               >
                 {[0, 1, 2, 3].map((slotIdx) => {
                   const doc = liveFiles[slotIdx];
-                  const isFirst = slotIdx === 0;
+                  const isSelected = doc && activeDoc?.id === doc.id;
                   return (
                     <div
                       key={slotIdx}
                       onClick={() => doc && openDocumentInEditor(doc)}
                       title={doc?.name}
                       style={{
-                        backgroundColor: isFirst ? '#cfd0d3' : '#8c8d91',
+                        backgroundColor: isSelected ? '#cfd0d3' : '#8c8d91',
                         borderRadius: 16,
                         cursor: doc ? 'pointer' : 'default',
+                        padding: 14,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        color: '#18181b',
+                        transition: 'all 0.2s ease',
                       }}
-                    />
+                    >
+                      {doc && (
+                        <>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: 10, fontWeight: 700, opacity: 0.6 }}>v{doc.version}</span>
+                            <Lock size={11} style={{ opacity: 0.55 }} />
+                          </div>
+                          <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {doc.name}
+                          </div>
+                        </>
+                      )}
+                    </div>
                   );
                 })}
               </div>
@@ -1220,8 +1238,38 @@ export default function LowWorkspacePage() {
                   backgroundColor: '#e4e4e7',
                   borderRadius: 22,
                   cursor: activeDoc ? 'pointer' : 'default',
+                  padding: 24,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  color: '#18181b',
                 }}
-              />
+              >
+                {activeDoc && (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 13, fontWeight: 700 }}>{activeDoc.name}</span>
+                      <span style={{ fontSize: 11, opacity: 0.6 }}>AES-256-GCM · v{activeDoc.version}</span>
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        opacity: 0.75,
+                        lineHeight: 1.55,
+                        maxHeight: '70%',
+                        overflow: 'hidden',
+                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                        whiteSpace: 'pre-wrap',
+                      }}
+                    >
+                      {activeDoc.body.slice(0, 420)}
+                    </div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: '#0088ff' }}>
+                      Open in Editor →
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           )}
 
@@ -2998,9 +3046,47 @@ export default function LowWorkspacePage() {
                             border: '1px solid #1f1f24',
                             fontSize: 11,
                             color: '#d4d4d8',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
                           }}
                         >
-                          <strong style={{ color: '#0088ff' }}>{c.type}</strong> · {c.label ?? c.id}
+                          <span>
+                            <strong style={{ color: '#0088ff' }}>{c.type}</strong> · {c.label ?? c.id}
+                          </span>
+                          {c.type !== 'page' && (
+                            <button
+                              onClick={async () => {
+                                const res = await fetch('/api/low', {
+                                  method: 'POST',
+                                  headers: apiHeaders,
+                                  body: JSON.stringify({
+                                    operation: 'remove_app_component',
+                                    data: {
+                                      appId: activeApp.id,
+                                      componentId: c.id,
+                                    },
+                                  }),
+                                });
+                                if (res.ok) {
+                                  await refreshWorkspace();
+                                  notify(`Removed ${c.label ?? c.id}`);
+                                }
+                              }}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: '#71717a',
+                                cursor: 'pointer',
+                                fontSize: 12,
+                                padding: 0,
+                                lineHeight: 1,
+                              }}
+                              title="Remove component"
+                            >
+                              ×
+                            </button>
+                          )}
                         </span>
                       ))}
                     </div>

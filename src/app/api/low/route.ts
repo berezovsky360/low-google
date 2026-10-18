@@ -317,6 +317,30 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ app });
       }
 
+      case 'remove_app_component': {
+        const appId = String(data.appId);
+        const componentId = String(data.componentId);
+        const current = await store.getApp(actor, appId);
+        if (!current) {
+          throw new Error(`App ${appId} not found`);
+        }
+        const nextDef = structuredClone(current.draftDefinition);
+        nextDef.components = nextDef.components
+          .filter((c) => c.id !== componentId)
+          .map((c) => ({
+            ...c,
+            ...(c.childrenIds
+              ? { childrenIds: c.childrenIds.filter((id) => id !== componentId) }
+              : {}),
+          }));
+        const app = await store.saveAppDraft(actor, {
+          appId,
+          expectedVersion: current.version,
+          definition: nextDef,
+        });
+        return NextResponse.json({ app });
+      }
+
       case 'publish_app': {
         const appId = String(data.appId);
         const expectedVersion = Number(data.expectedVersion);
