@@ -6,20 +6,18 @@ import {
   Archive,
   ArrowLeft,
   Calendar as CalendarIcon,
-  CheckCircle2,
   ChevronDown,
   ChevronRight,
   Code2,
   Copy,
-  Database,
   Download,
   FileText,
   Folder,
   FolderPlus,
-  GitCompare,
   History,
   Inbox,
   LayoutGrid,
+  Link2,
   List,
   Lock,
   Mic,
@@ -32,9 +30,7 @@ import {
   Search,
   Send,
   Settings,
-  ShieldCheck,
-  Sparkles,
-  Trash2,
+  SlidersHorizontal,
   User,
   X,
 } from 'lucide-react';
@@ -162,7 +158,7 @@ interface BuilderDiffItem {
   removedComponentIds: string[];
 }
 
-type VaultViewMode = 'grid' | 'list' | 'calendar' | 'graph' | 'editor' | 'inbox' | 'code' | 'judge';
+type VaultViewMode = 'grid' | 'list' | 'calendar' | 'graph' | 'editor' | 'inbox' | 'code';
 
 const DEMO_TENANTS = [
   {
@@ -170,14 +166,12 @@ const DEMO_TENANTS = [
     orgId: 'org-berezovsky',
     role: 'owner' as const,
     handle: '@berezovsky360',
-    label: 'LOW Vault (@berezovsky360 · Owner)',
   },
   {
     uid: 'beta_admin',
     orgId: 'org-beta',
     role: 'owner' as const,
     handle: '@beta_admin',
-    label: 'Beta Labs (Isolated Tenant B · Owner)',
   },
 ];
 
@@ -196,10 +190,10 @@ export default function LowWorkspacePage() {
 
   const [viewMode, setViewMode] = useState<VaultViewMode>('grid');
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [tenantMenuOpen, setTenantMenuOpen] = useState(false);
 
-  // Loaded data from /api/low
   const [documents, setDocuments] = useState<DocItem[]>([]);
   const [rawCiphertexts, setRawCiphertexts] = useState<Record<string, string>>({});
   const [collections, setCollections] = useState<KnowledgeCollectionItem[]>([]);
@@ -207,22 +201,15 @@ export default function LowWorkspacePage() {
   const [apps, setApps] = useState<AppItem[]>([]);
   const [appRecordsMap, setAppRecordsMap] = useState<Record<string, AppRecordItem[]>>({});
   const [auditEvents, setAuditEvents] = useState<AuditEventItem[]>([]);
-  const [models, setModels] = useState({
-    reasoning: 'gemini-2.5-flash',
-    transcription: 'gemini-2.5-flash',
-    embedding: 'text-embedding-004',
-  });
 
-  // Open tabs & active file editor
   const [openTabIds, setOpenTabIds] = useState<string[]>(['2026-09-07-19-45-33']);
   const [activeDocId, setActiveDocId] = useState<string | null>('2026-09-07-19-45-33');
   const [editorBody, setEditorBody] = useState('');
   const [editorFontSize, setEditorFontSize] = useState(14);
-  const [showCiphertextInspector, setShowCiphertextInspector] = useState(false);
+  const [showInspector, setShowInspector] = useState(false);
   const [docVersions, setDocVersions] = useState<DocVersionItem[]>([]);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
 
-  // Tree expansion state
   const [vaultsExpanded, setVaultsExpanded] = useState(true);
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({
     'folder-test': true,
@@ -230,35 +217,28 @@ export default function LowWorkspacePage() {
   const [binExpanded, setBinExpanded] = useState(true);
   const [sharedExpanded, setSharedExpanded] = useState(false);
 
-  // Graph zoom
   const [graphZoom, setGraphZoom] = useState(100);
 
-  // Memory Q&A state
-  const [memoryQuestion, setMemoryQuestion] = useState(
-    'How quickly must production incidents be escalated, and how are organization keys wrapped?'
-  );
+  // Memory Q&A
+  const [memoryQuestion, setMemoryQuestion] = useState('');
   const [memoryAnswer, setMemoryAnswer] = useState<MemoryAnswerItem | null>(null);
   const [memoryLoading, setMemoryLoading] = useState(false);
-  const [rebuildNotice, setRebuildNotice] = useState<string | null>(null);
 
-  // App Builder & Runtime state
-  const [builderInstruction, setBuilderInstruction] = useState(
-    'Add a KPI metric card for total contract value'
-  );
+  // App Builder
+  const [codeTab, setCodeTab] = useState<'app' | 'builder' | 'audit'>('app');
+  const [builderInstruction, setBuilderInstruction] = useState('');
   const [proposedDiff, setProposedDiff] = useState<BuilderDiffItem | null>(null);
   const [newDealTitle, setNewDealTitle] = useState('');
   const [newDealAmount, setNewDealAmount] = useState('40000');
 
-  // Modals (Mic Capture & New File/Folder)
+  // Modals
   const [micModalOpen, setMicModalOpen] = useState(false);
-  const [voiceTranscriptInput, setVoiceTranscriptInput] = useState(
-    'Meeting transcript: Finalized Q4 Google Cloud Run deployment with min-instances=1 and KMS key rotation.'
-  );
+  const [voiceTranscriptInput, setVoiceTranscriptInput] = useState('');
   const [newFileModalOpen, setNewFileModalOpen] = useState(false);
   const [newItemKind, setNewItemKind] = useState<'file' | 'folder'>('file');
   const [newItemName, setNewItemName] = useState('');
   const [newItemParentId, setNewItemParentId] = useState<string>('');
-  const [newItemBody, setNewItemBody] = useState('# New Note\n\nWrite Markdown here.');
+  const [newItemBody, setNewItemBody] = useState('');
 
   const [statusToast, setStatusToast] = useState<string | null>(null);
 
@@ -266,7 +246,7 @@ export default function LowWorkspacePage() {
     setStatusToast(msg);
     setTimeout(() => {
       setStatusToast((prev) => (prev === msg ? null : prev));
-    }, 4000);
+    }, 2800);
   }, []);
 
   const apiHeaders = useMemo(
@@ -290,9 +270,6 @@ export default function LowWorkspacePage() {
     setApps(data.apps ?? []);
     setAppRecordsMap(data.appRecordsMap ?? {});
     setAuditEvents(data.auditEvents ?? []);
-    if (data.models) {
-      setModels(data.models);
-    }
   }, [apiHeaders]);
 
   useEffect(() => {
@@ -342,19 +319,16 @@ export default function LowWorkspacePage() {
     }
   }, [activeDoc?.id, activeDoc?.version]);
 
-  const openDocumentInEditor = useCallback(
-    (doc: DocItem) => {
-      if (doc.kind === 'folder') {
-        setExpandedFolders((prev) => ({ ...prev, [doc.id]: !prev[doc.id] }));
-        return;
-      }
-      setActiveDocId(doc.id);
-      setEditorBody(doc.body);
-      setOpenTabIds((prev) => (prev.includes(doc.id) ? prev : [...prev, doc.id]));
-      setViewMode('editor');
-    },
-    []
-  );
+  const openDocumentInEditor = useCallback((doc: DocItem) => {
+    if (doc.kind === 'folder') {
+      setExpandedFolders((prev) => ({ ...prev, [doc.id]: !prev[doc.id] }));
+      return;
+    }
+    setActiveDocId(doc.id);
+    setEditorBody(doc.body);
+    setOpenTabIds((prev) => (prev.includes(doc.id) ? prev : [...prev, doc.id]));
+    setViewMode('editor');
+  }, []);
 
   const handleSaveActiveDocument = async () => {
     if (!activeDoc || activeDoc.kind !== 'file') return;
@@ -372,11 +346,11 @@ export default function LowWorkspacePage() {
     });
     const payload = await res.json();
     if (!res.ok) {
-      notify(`Conflict / Error: ${payload.error}`);
+      notify(payload.error);
       return;
     }
     await refreshWorkspace();
-    notify(`Saved & encrypted ${activeDoc.name} (v${payload.document.version})`);
+    notify(`Saved v${payload.document.version}`);
   };
 
   const handleLoadVersions = async (docId: string) => {
@@ -391,7 +365,7 @@ export default function LowWorkspacePage() {
     const data = await res.json();
     if (res.ok) {
       setDocVersions(data.versions ?? []);
-      setShowVersionHistory(true);
+      setShowVersionHistory((v) => !v);
     }
   };
 
@@ -407,17 +381,12 @@ export default function LowWorkspacePage() {
         },
       }),
     });
-    const data = await res.json();
-    if (!res.ok) {
-      notify(`Archive failed: ${data.error}`);
-      return;
-    }
-    await refreshWorkspace();
-    notify(
-      `Archived "${doc.name}" with single-use HMAC approval ${data.approval.id.slice(0, 8)}…`
-    );
-    if (viewMode === 'editor' && activeDoc?.id === doc.id) {
-      setViewMode('list');
+    if (res.ok) {
+      await refreshWorkspace();
+      notify('Moved to Bin');
+      if (viewMode === 'editor' && activeDoc?.id === doc.id) {
+        setViewMode('list');
+      }
     }
   };
 
@@ -435,7 +404,7 @@ export default function LowWorkspacePage() {
     });
     if (res.ok) {
       await refreshWorkspace();
-      notify(`Restored "${doc.name}" from Bin`);
+      notify('Restored');
     }
   };
 
@@ -464,11 +433,11 @@ export default function LowWorkspacePage() {
     if (res.ok) {
       setNewFileModalOpen(false);
       setNewItemName('');
+      setNewItemBody('');
       await refreshWorkspace();
       if (data.document.kind === 'file') {
         openDocumentInEditor(data.document);
       }
-      notify(`Created ${newItemKind} "${formattedName}"`);
     }
   };
 
@@ -485,7 +454,7 @@ export default function LowWorkspacePage() {
         operation: 'capture_audio',
         data: {
           fileName: nowName,
-          transcriptText: voiceTranscriptInput,
+          transcriptText: voiceTranscriptInput || 'Voice note',
           targetFolderId: liveFolders[0]?.id ?? null,
           language: 'en',
         },
@@ -494,9 +463,9 @@ export default function LowWorkspacePage() {
     const data = await res.json();
     if (res.ok) {
       setMicModalOpen(false);
+      setVoiceTranscriptInput('');
       await refreshWorkspace();
       openDocumentInEditor(data.document);
-      notify(`Transcribed audio with ${data.transcribedModel} & indexed into Memory`);
     }
   };
 
@@ -529,21 +498,17 @@ export default function LowWorkspacePage() {
     const res = await fetch('/api/low', {
       method: 'POST',
       headers: apiHeaders,
-      body: JSON.stringify({
-        operation: 'rebuild_derived',
-      }),
+      body: JSON.stringify({ operation: 'rebuild_derived' }),
     });
     const data = await res.json();
     if (res.ok) {
       await refreshWorkspace();
-      const s = data.rebuildStats;
-      const msg = `Deleted ${s.deletedChunks} chunks & rebuilt ${s.rebuiltChunks} vector embeddings from ${s.rebuiltDocuments} encrypted Markdown files.`;
-      setRebuildNotice(msg);
-      notify(msg);
+      notify(`Rebuilt ${data.rebuildStats.rebuiltChunks} chunks`);
     }
   };
 
   const handleProposeDiff = async (appId: string) => {
+    if (!builderInstruction.trim()) return;
     const res = await fetch('/api/low', {
       method: 'POST',
       headers: apiHeaders,
@@ -558,7 +523,6 @@ export default function LowWorkspacePage() {
     const data = await res.json();
     if (res.ok) {
       setProposedDiff(data.diff);
-      notify('Builder Agent generated validated diff preview (read/validate/preview only)');
     }
   };
 
@@ -578,8 +542,9 @@ export default function LowWorkspacePage() {
     });
     if (res.ok) {
       setProposedDiff(null);
+      setBuilderInstruction('');
       await refreshWorkspace();
-      notify('Applied validated diff to App draft');
+      notify('Applied diff');
     }
   };
 
@@ -598,7 +563,7 @@ export default function LowWorkspacePage() {
     const data = await res.json();
     if (res.ok) {
       await refreshWorkspace();
-      notify(`Published immutable App Snapshot v${data.snapshot.version}`);
+      notify(`Published v${data.snapshot.version}`);
     }
   };
 
@@ -617,14 +582,13 @@ export default function LowWorkspacePage() {
             amount: Number(newDealAmount) || 0,
             dueDate: '2026-09-18',
           },
-          notesMarkdown: `Created by ${currentTenant.handle} as an encrypted Markdown record.`,
+          notesMarkdown: '',
         },
       }),
     });
     if (res.ok) {
       setNewDealTitle('');
       await refreshWorkspace();
-      notify('Created encrypted Markdown app record');
     }
   };
 
@@ -649,11 +613,10 @@ export default function LowWorkspacePage() {
     });
     const data = await res.json();
     if (!res.ok) {
-      notify(`Transition blocked: ${data.error}`);
+      notify(data.error);
       return;
     }
     await refreshWorkspace();
-    notify(`Transitioned record to "${toStatus}" (audited with HMAC approval)`);
   };
 
   const handleRunAutomationJob = async (appId: string) => {
@@ -665,19 +628,13 @@ export default function LowWorkspacePage() {
         data: {
           appId,
           triggerType: 'schedule',
-          payload: {
-            requestedBy: currentTenant.handle,
-            runDate: new Date().toISOString(),
-          },
+          payload: { runDate: new Date().toISOString() },
         },
       }),
     });
-    const data = await res.json();
-    if (res.ok && data.processed?.outputDocument) {
+    if (res.ok) {
       await refreshWorkspace();
-      notify(
-        `Cloud Run Job completed queue item & wrote ${data.processed.outputDocument.name}`
-      );
+      notify('Job completed');
     }
   };
 
@@ -697,7 +654,7 @@ export default function LowWorkspacePage() {
       }}
     >
       {/* =================================================================== */}
-      {/* TOP BAR (Matches Screenshots 1-5)                                   */}
+      {/* MINIMALIST TOP BAR (Matches Screenshots 1-5)                        */}
       {/* =================================================================== */}
       <header
         style={{
@@ -707,16 +664,14 @@ export default function LowWorkspacePage() {
           justifyContent: 'space-between',
           padding: '0 12px',
           gap: 10,
-          borderBottom: '1px solid #18181b',
           backgroundColor: '#0b0b0c',
           flexShrink: 0,
         }}
       >
-        {/* Left: Blue LOW Vault Icon + Tab Strip */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
+          {/* Blue LOW Icon */}
           <button
             onClick={() => setViewMode('grid')}
-            title="LOW Vault Home"
             style={{
               width: 36,
               height: 36,
@@ -728,7 +683,6 @@ export default function LowWorkspacePage() {
               justifyContent: 'center',
               cursor: 'pointer',
               flexShrink: 0,
-              boxShadow: '0 2px 10px rgba(0, 136, 255, 0.35)',
             }}
           >
             <div
@@ -749,13 +703,13 @@ export default function LowWorkspacePage() {
             </div>
           </button>
 
-          {/* Rounded Dark Tab Strip + Search Bar */}
+          {/* Minimal Tab Bar */}
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
               backgroundColor: '#131316',
-              border: '1px solid #1f1f23',
+              border: '1px solid #1c1c20',
               borderRadius: 10,
               height: 36,
               padding: '0 8px',
@@ -780,14 +734,14 @@ export default function LowWorkspacePage() {
                     borderRadius: 7,
                     fontSize: 12,
                     cursor: 'pointer',
-                    backgroundColor: isCurrent ? '#1f1f24' : 'transparent',
+                    backgroundColor: isCurrent ? '#1d1d22' : 'transparent',
                     color: isCurrent ? '#f4f4f6' : '#8e8e93',
                     whiteSpace: 'nowrap',
                   }}
                 >
                   <span style={{ color: '#636366' }}>#</span>
                   <span>
-                    {doc.name.length > 18 ? `${doc.name.slice(0, 16)}...` : doc.name}
+                    {doc.name.length > 18 ? `${doc.name.slice(0, 15)}....` : doc.name}
                   </span>
                   <span
                     onClick={(e) => {
@@ -812,7 +766,6 @@ export default function LowWorkspacePage() {
                 setNewItemKind('file');
                 setNewFileModalOpen(true);
               }}
-              title="New Markdown file"
               style={{
                 background: 'none',
                 border: 'none',
@@ -828,77 +781,64 @@ export default function LowWorkspacePage() {
 
             <div style={{ flex: 1 }} />
 
-            {/* Inline Quick Search + Judge Console Pill */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <button
-                onClick={() => setViewMode('judge')}
-                style={{
-                  backgroundColor: viewMode === 'judge' ? '#0088ff' : '#1c2838',
-                  color: viewMode === 'judge' ? '#ffffff' : '#60a5fa',
-                  border: '1px solid #1e3a5f',
-                  borderRadius: 6,
-                  padding: '3px 9px',
-                  fontSize: 11,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 5,
+            {searchOpen && (
+              <input
+                autoFocus
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onBlur={() => {
+                  if (!searchQuery) setSearchOpen(false);
                 }}
-              >
-                <ShieldCheck size={13} />
-                <span>Hackathon Judge Console</span>
-              </button>
-
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  backgroundColor: '#1a1a1f',
-                  borderRadius: 6,
-                  padding: '3px 8px',
-                }}
-              >
-                <Search size={13} color="#60a5fa" />
-                <input
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Filter Vault..."
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    outline: 'none',
-                    fontSize: 12,
-                    width: 110,
-                    color: '#e5e5e7',
-                  }}
-                />
-              </div>
-
-              <button
-                onClick={() => setSidebarOpen((v) => !v)}
-                title="Toggle Right Sidebar"
+                placeholder="Search..."
                 style={{
                   background: '#1c1c21',
-                  border: '1px solid #2c2c32',
+                  border: 'none',
                   borderRadius: 6,
-                  width: 26,
-                  height: 26,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  color: '#a1a1aa',
+                  padding: '3px 8px',
+                  outline: 'none',
+                  fontSize: 12,
+                  width: 140,
+                  color: '#e5e5e7',
                 }}
-              >
-                <PanelRight size={14} />
-              </button>
-            </div>
+              />
+            )}
+
+            <button
+              onClick={() => setSearchOpen((v) => !v)}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                padding: 4,
+                display: 'flex',
+                alignItems: 'center',
+                color: '#0088ff',
+              }}
+            >
+              <Search size={14} />
+            </button>
+
+            <button
+              onClick={() => setSidebarOpen((v) => !v)}
+              style={{
+                background: '#1c1c21',
+                border: '1px solid #2c2c32',
+                borderRadius: 6,
+                width: 26,
+                height: 26,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                color: '#a1a1aa',
+              }}
+            >
+              <PanelRight size={14} />
+            </button>
           </div>
         </div>
 
-        {/* Right: User / Organization Switcher (@berezovsky360) */}
+        {/* Right: User Menu (@berezovsky360) */}
         <div style={{ position: 'relative', width: 268, flexShrink: 0 }}>
           <button
             onClick={() => setTenantMenuOpen((o) => !o)}
@@ -906,7 +846,7 @@ export default function LowWorkspacePage() {
               width: '100%',
               height: 36,
               backgroundColor: '#131316',
-              border: '1px solid #1f1f23',
+              border: '1px solid #1c1c20',
               borderRadius: 10,
               padding: '0 12px',
               display: 'flex',
@@ -920,17 +860,6 @@ export default function LowWorkspacePage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <User size={14} color="#a1a1aa" />
               <span>{currentTenant.handle}</span>
-              <span
-                style={{
-                  fontSize: 10,
-                  padding: '1px 5px',
-                  borderRadius: 4,
-                  backgroundColor: '#1f2937',
-                  color: '#93c5fd',
-                }}
-              >
-                {currentTenant.orgId}
-              </span>
             </div>
             <ChevronDown size={13} color="#71717a" />
           </button>
@@ -941,7 +870,7 @@ export default function LowWorkspacePage() {
                 position: 'absolute',
                 top: 42,
                 right: 0,
-                width: 300,
+                width: 268,
                 backgroundColor: '#16161a',
                 border: '1px solid #27272a',
                 borderRadius: 10,
@@ -950,17 +879,6 @@ export default function LowWorkspacePage() {
                 boxShadow: '0 12px 32px rgba(0,0,0,0.6)',
               }}
             >
-              <div
-                style={{
-                  fontSize: 10,
-                  color: '#71717a',
-                  padding: '4px 8px',
-                  textTransform: 'uppercase',
-                  letterSpacing: 0.6,
-                }}
-              >
-                Switch Tenant (Live Isolation Proof)
-              </div>
               {DEMO_TENANTS.map((t, idx) => (
                 <button
                   key={t.orgId}
@@ -969,35 +887,31 @@ export default function LowWorkspacePage() {
                     setTenantMenuOpen(false);
                     setMemoryAnswer(null);
                     setViewMode('grid');
-                    notify(`Switched active tenant token to ${t.orgId} (${t.handle})`);
                   }}
                   style={{
                     width: '100%',
                     textAlign: 'left',
-                    padding: '8px 10px',
+                    padding: '7px 10px',
                     borderRadius: 7,
                     border: 'none',
                     backgroundColor:
-                      idx === activeTenantIdx ? '#1f2937' : 'transparent',
+                      idx === activeTenantIdx ? '#222228' : 'transparent',
                     color: '#e5e5e7',
                     fontSize: 12,
                     cursor: 'pointer',
                     display: 'flex',
-                    flexDirection: 'column',
-                    gap: 2,
+                    justifyContent: 'space-between',
                   }}
                 >
-                  <span style={{ fontWeight: 600 }}>{t.label}</span>
-                  <span style={{ fontSize: 11, color: '#9ca3af' }}>
-                    Claims: {`{ orgId: "${t.orgId}", role: "${t.role}" }`}
-                  </span>
+                  <span>{t.handle}</span>
+                  <span style={{ color: '#71717a', fontSize: 11 }}>{t.orgId}</span>
                 </button>
               ))}
               <div
                 style={{
                   borderTop: '1px solid #27272a',
-                  marginTop: 6,
-                  paddingTop: 6,
+                  marginTop: 4,
+                  paddingTop: 4,
                 }}
               >
                 <a
@@ -1013,12 +927,12 @@ export default function LowWorkspacePage() {
                     padding: '7px 10px',
                     borderRadius: 7,
                     fontSize: 12,
-                    color: '#60a5fa',
+                    color: '#a1a1aa',
                     textDecoration: 'none',
                   }}
                 >
-                  <Download size={14} />
-                  <span>Export Organization (.zip of Markdown)</span>
+                  <Download size={13} />
+                  <span>Export .zip</span>
                 </a>
               </div>
             </div>
@@ -1027,10 +941,9 @@ export default function LowWorkspacePage() {
       </header>
 
       {/* =================================================================== */}
-      {/* MAIN BODY (Center Workspace + Right Sidebar)                        */}
+      {/* MAIN BODY                                                           */}
       {/* =================================================================== */}
       <div style={{ display: 'flex', flex: 1, minHeight: 0, position: 'relative' }}>
-        {/* CENTER WORKSPACE */}
         <main
           style={{
             flex: 1,
@@ -1041,43 +954,34 @@ export default function LowWorkspacePage() {
             position: 'relative',
           }}
         >
-          {/* Vault Header (Shown in Grid, List, Calendar, Graph, Inbox, Code, Judge views) */}
+          {/* Minimal Vault Header */}
           {viewMode !== 'editor' && (
             <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                padding: '12px 18px 8px 18px',
+                padding: '10px 18px 8px 18px',
+                borderBottom: '1px solid #141417',
                 flexShrink: 0,
               }}
             >
               <div>
                 <div style={{ fontSize: 14, fontWeight: 600, color: '#f4f4f6' }}>
                   {viewMode === 'inbox'
-                    ? 'Memory & Grounded Q&A'
+                    ? 'Inbox'
                     : viewMode === 'code'
-                    ? 'Deterministic App Builder & Runtime'
-                    : viewMode === 'judge'
-                    ? 'Hackathon Judge Verification Suite'
+                    ? 'Code'
                     : 'Vault'}
                 </div>
                 <div style={{ fontSize: 11, color: '#71717a', marginTop: 1 }}>
-                  {viewMode === 'inbox'
-                    ? `Ask questions across ${collections.length} knowledge collection(s) · ${chunkCount} indexed vector chunks`
-                    : viewMode === 'code'
-                    ? 'Closed Zod schema components · No generated code ever executes'
-                    : viewMode === 'judge'
-                    ? 'Interactive verification of all 8 principles, KMS AES-256-GCM encryption, and grounding'
-                    : 'Everything you have kept'}
+                  Everything you have kept
                 </div>
               </div>
 
-              {/* View Mode Switcher Icons (Matches Screenshots 1, 3, 4, 5) */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <button
                   onClick={() => setViewMode('grid')}
-                  title="Bento Grid View"
                   style={{
                     background: 'none',
                     border: 'none',
@@ -1087,11 +991,10 @@ export default function LowWorkspacePage() {
                     alignItems: 'center',
                   }}
                 >
-                  <LayoutGrid size={16} />
+                  <LayoutGrid size={15} />
                 </button>
                 <button
                   onClick={() => setViewMode('list')}
-                  title="List View"
                   style={{
                     background: 'none',
                     border: 'none',
@@ -1101,11 +1004,10 @@ export default function LowWorkspacePage() {
                     alignItems: 'center',
                   }}
                 >
-                  <List size={16} />
+                  <List size={15} />
                 </button>
                 <button
                   onClick={() => setViewMode('calendar')}
-                  title="Calendar View"
                   style={{
                     background: 'none',
                     border: 'none',
@@ -1115,11 +1017,10 @@ export default function LowWorkspacePage() {
                     alignItems: 'center',
                   }}
                 >
-                  <CalendarIcon size={16} />
+                  <CalendarIcon size={15} />
                 </button>
                 <button
                   onClick={() => setViewMode('graph')}
-                  title="Knowledge Graph View"
                   style={{
                     background: 'none',
                     border: 'none',
@@ -1129,7 +1030,7 @@ export default function LowWorkspacePage() {
                     alignItems: 'center',
                   }}
                 >
-                  <Network size={16} />
+                  <Network size={15} />
                 </button>
 
                 <button
@@ -1147,7 +1048,7 @@ export default function LowWorkspacePage() {
                     letterSpacing: 0.4,
                   }}
                 >
-                  <Settings size={14} />
+                  <Settings size={13} />
                   <span>CUSTOMIZE</span>
                 </button>
               </div>
@@ -1155,7 +1056,7 @@ export default function LowWorkspacePage() {
           )}
 
           {/* =============================================================== */}
-          {/* VIEW 1: BENTO GRID VIEW (Matches Screenshot 1)                  */}
+          {/* VIEW 1: MINIMAL BENTO GRID (Matches Screenshot 1)               */}
           {/* =============================================================== */}
           {viewMode === 'grid' && (
             <div
@@ -1163,7 +1064,7 @@ export default function LowWorkspacePage() {
                 flex: 1,
                 display: 'flex',
                 gap: 20,
-                padding: '10px 18px 24px 18px',
+                padding: '14px 18px 24px 18px',
                 minHeight: 0,
               }}
             >
@@ -1187,325 +1088,36 @@ export default function LowWorkspacePage() {
                     <div
                       key={slotIdx}
                       onClick={() => doc && openDocumentInEditor(doc)}
+                      title={doc?.name}
                       style={{
                         backgroundColor: isFirst ? '#cfd0d3' : '#8c8d91',
-                        color: '#111113',
                         borderRadius: 16,
-                        padding: 18,
                         cursor: doc ? 'pointer' : 'default',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        justifyContent: 'space-between',
-                        transition: 'transform 0.12s ease',
-                        overflow: 'hidden',
                       }}
-                    >
-                      {doc ? (
-                        <>
-                          <div>
-                            <div
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                fontSize: 11,
-                                fontWeight: 700,
-                                opacity: 0.7,
-                              }}
-                            >
-                              <span>
-                                {doc.parentId
-                                  ? folderNameById.get(doc.parentId) ?? 'Vault'
-                                  : 'Vault'}
-                              </span>
-                              <span>v{doc.version} · AES-256-GCM</span>
-                            </div>
-                            <div
-                              style={{
-                                fontSize: 14,
-                                fontWeight: 700,
-                                marginTop: 6,
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap',
-                              }}
-                            >
-                              {doc.name}
-                            </div>
-                            <div
-                              style={{
-                                fontSize: 12,
-                                marginTop: 8,
-                                lineHeight: 1.45,
-                                opacity: 0.85,
-                                display: '-webkit-box',
-                                WebkitLineClamp: 5,
-                                WebkitBoxOrient: 'vertical',
-                                overflow: 'hidden',
-                              }}
-                            >
-                              {doc.body}
-                            </div>
-                          </div>
-                          <div
-                            style={{
-                              fontSize: 10,
-                              fontWeight: 600,
-                              opacity: 0.65,
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                            }}
-                          >
-                            <span>SHA-256: {doc.sha256.slice(0, 10)}…</span>
-                            <span>{doc.sizeBytes} B</span>
-                          </div>
-                        </>
-                      ) : (
-                        <div style={{ fontSize: 12, opacity: 0.6 }}>Empty slot</div>
-                      )}
-                    </div>
+                    />
                   );
                 })}
               </div>
 
-              {/* Right Large Featured Card (Matches Screenshot 1 right canvas) */}
+              {/* Right Large Minimalist Canvas */}
               <div
+                onClick={() => activeDoc && openDocumentInEditor(activeDoc)}
+                title={activeDoc?.name}
                 style={{
                   flex: 1,
                   backgroundColor: '#e4e4e7',
-                  color: '#111113',
                   borderRadius: 22,
-                  padding: 26,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'space-between',
-                  overflow: 'auto',
+                  cursor: activeDoc ? 'pointer' : 'default',
                 }}
-              >
-                <div>
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      marginBottom: 14,
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontSize: 11,
-                        fontWeight: 700,
-                        textTransform: 'uppercase',
-                        letterSpacing: 0.6,
-                        padding: '4px 10px',
-                        borderRadius: 6,
-                        backgroundColor: '#111113',
-                        color: '#ffffff',
-                      }}
-                    >
-                      Your Agents Remember, And You Own The Memory
-                    </span>
-                    <span style={{ fontSize: 12, fontWeight: 600, opacity: 0.7 }}>
-                      Tenant: {currentTenant.orgId} · KMS Key v1
-                    </span>
-                  </div>
-
-                  <h2 style={{ fontSize: 22, fontWeight: 800, marginBottom: 8 }}>
-                    {activeDoc ? activeDoc.name : 'Workspace Vault'}
-                  </h2>
-
-                  <div
-                    style={{
-                      fontSize: 13,
-                      lineHeight: 1.6,
-                      backgroundColor: 'rgba(255,255,255,0.65)',
-                      padding: 16,
-                      borderRadius: 12,
-                      marginBottom: 18,
-                    }}
-                  >
-                    {activeDoc ? (
-                      <ReactMarkdown>{activeDoc.body}</ReactMarkdown>
-                    ) : (
-                      <p>Select any Markdown file from the Vault tree to view or edit.</p>
-                    )}
-                  </div>
-
-                  {/* Embedded Quick Grounded Memory Search inside the Hero Canvas */}
-                  <div
-                    style={{
-                      backgroundColor: '#18181b',
-                      color: '#f4f4f6',
-                      borderRadius: 14,
-                      padding: 16,
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        marginBottom: 10,
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 6,
-                          fontSize: 12,
-                          fontWeight: 700,
-                          color: '#60a5fa',
-                        }}
-                      >
-                        <Sparkles size={14} />
-                        <span>Ask Grounded Company Memory ({models.reasoning})</span>
-                      </div>
-                      <span style={{ fontSize: 11, color: '#a1a1aa' }}>
-                        {chunkCount} embedded chunks in {collections.length} collection(s)
-                      </span>
-                    </div>
-
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <input
-                        value={memoryQuestion}
-                        onChange={(e) => setMemoryQuestion(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') void handleAskMemory();
-                        }}
-                        placeholder="Ask a question grounded in your Markdown files..."
-                        style={{
-                          flex: 1,
-                          backgroundColor: '#27272a',
-                          border: '1px solid #3f3f46',
-                          borderRadius: 8,
-                          padding: '8px 12px',
-                          fontSize: 12,
-                          color: '#f4f4f6',
-                          outline: 'none',
-                        }}
-                      />
-                      <button
-                        onClick={() => void handleAskMemory()}
-                        disabled={memoryLoading}
-                        style={{
-                          backgroundColor: '#0088ff',
-                          color: '#ffffff',
-                          border: 'none',
-                          borderRadius: 8,
-                          padding: '0 14px',
-                          fontSize: 12,
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 6,
-                        }}
-                      >
-                        <Send size={13} />
-                        <span>{memoryLoading ? 'Searching…' : 'Ask'}</span>
-                      </button>
-                    </div>
-
-                    {memoryAnswer && (
-                      <div
-                        style={{
-                          marginTop: 12,
-                          paddingTop: 12,
-                          borderTop: '1px solid #27272a',
-                          fontSize: 12,
-                          lineHeight: 1.5,
-                        }}
-                      >
-                        <div style={{ marginBottom: 8 }}>
-                          <ReactMarkdown>{memoryAnswer.answerMarkdown}</ReactMarkdown>
-                        </div>
-                        {memoryAnswer.citations.length > 0 && (
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                            {memoryAnswer.citations.map((c, idx) => (
-                              <span
-                                key={idx}
-                                onClick={() => {
-                                  const target = documents.find((d) => d.id === c.docId);
-                                  if (target) openDocumentInEditor(target);
-                                }}
-                                style={{
-                                  fontSize: 11,
-                                  padding: '3px 8px',
-                                  borderRadius: 6,
-                                  backgroundColor: '#1e3a5f',
-                                  color: '#93c5fd',
-                                  cursor: 'pointer',
-                                }}
-                              >
-                                Cite: {c.documentName} ({c.docId} §{c.paragraphOrdinal})
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    marginTop: 14,
-                    fontSize: 12,
-                    fontWeight: 600,
-                  }}
-                >
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    {activeDoc && (
-                      <button
-                        onClick={() => openDocumentInEditor(activeDoc)}
-                        style={{
-                          backgroundColor: '#111113',
-                          color: '#ffffff',
-                          border: 'none',
-                          borderRadius: 8,
-                          padding: '7px 14px',
-                          fontSize: 12,
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                        }}
-                      >
-                        Open in Markdown Editor
-                      </button>
-                    )}
-                    <button
-                      onClick={() => setViewMode('code')}
-                      style={{
-                        backgroundColor: 'rgba(0,0,0,0.1)',
-                        color: '#111113',
-                        border: '1px solid rgba(0,0,0,0.2)',
-                        borderRadius: 8,
-                        padding: '7px 14px',
-                        fontSize: 12,
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      Open App Builder ({apps.length} App)
-                    </button>
-                  </div>
-                  <span style={{ opacity: 0.65 }}>
-                    {liveFiles.length} live Markdown files · {auditEvents.length} audit events
-                  </span>
-                </div>
-              </div>
+              />
             </div>
           )}
 
           {/* =============================================================== */}
-          {/* VIEW 2: MARKDOWN EDITOR VIEW (Matches Screenshot 2)             */}
+          {/* VIEW 2: MARKDOWN EDITOR (Matches Screenshot 2)                  */}
           {/* =============================================================== */}
           {viewMode === 'editor' && activeDoc && (
             <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-              {/* Editor Top Document Header */}
               <div
                 style={{
                   display: 'flex',
@@ -1527,24 +1139,19 @@ export default function LowWorkspacePage() {
                       alignItems: 'center',
                     }}
                   >
-                    <ArrowLeft size={16} />
+                    <ArrowLeft size={15} />
                   </button>
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 600, color: '#f4f4f6' }}>
                       {activeDoc.name}
                     </div>
                     <div style={{ fontSize: 11, color: '#71717a' }}>
-                      Vault /{' '}
-                      {activeDoc.parentId
-                        ? `${folderNameById.get(activeDoc.parentId) ?? ''}/`
-                        : ''}
-                      {activeDoc.name}
+                      Vault / {activeDoc.name}
                     </div>
                   </div>
                 </div>
 
-                {/* Right Editor Controls (Matches Screenshot 2: Download, Copy, Share, A 14 A, Inspector) */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                   <button
                     onClick={() => {
                       const blob = new Blob([editorBody], { type: 'text/markdown' });
@@ -1555,7 +1162,6 @@ export default function LowWorkspacePage() {
                       a.click();
                       URL.revokeObjectURL(url);
                     }}
-                    title="Download plain Markdown"
                     style={{
                       background: 'none',
                       border: 'none',
@@ -1569,9 +1175,8 @@ export default function LowWorkspacePage() {
                   <button
                     onClick={() => {
                       void navigator.clipboard?.writeText(editorBody);
-                      notify('Copied Markdown to clipboard');
+                      notify('Copied');
                     }}
-                    title="Copy Markdown"
                     style={{
                       background: 'none',
                       border: 'none',
@@ -1584,7 +1189,6 @@ export default function LowWorkspacePage() {
 
                   <button
                     onClick={() => void handleLoadVersions(activeDoc.id)}
-                    title="Version History"
                     style={{
                       background: 'none',
                       border: 'none',
@@ -1632,25 +1236,20 @@ export default function LowWorkspacePage() {
                   </div>
 
                   <button
-                    onClick={() => setShowCiphertextInspector((v) => !v)}
-                    title="Inspect AES-256-GCM Ciphertext & AAD"
+                    onClick={() => setShowInspector((v) => !v)}
                     style={{
                       background: 'none',
                       border: 'none',
-                      color: showCiphertextInspector ? '#0088ff' : '#0088ff',
+                      color: '#0088ff',
                       cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      fontSize: 11,
                     }}
                   >
-                    <Lock size={14} />
+                    <SlidersHorizontal size={15} />
                   </button>
                 </div>
               </div>
 
-              {/* Formatting & Concurrency Toolbar (Matches Screenshot 2) */}
+              {/* Minimal Formatting Toolbar */}
               <div
                 style={{
                   display: 'flex',
@@ -1662,8 +1261,8 @@ export default function LowWorkspacePage() {
                   color: '#a1a1aa',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     Text <ChevronDown size={12} />
                   </span>
                   <button
@@ -1713,12 +1312,22 @@ export default function LowWorkspacePage() {
                   >
                     {'<>'}
                   </button>
+                  <button
+                    onClick={() => setEditorBody((b) => `${b} [link](https://)`)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: '#a1a1aa',
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <Link2 size={13} />
+                  </button>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 11, color: '#71717a' }}>
-                    expectedVersion: {activeDoc.version}
-                  </span>
+                {editorBody !== activeDoc.body && (
                   <button
                     onClick={() => void handleSaveActiveDocument()}
                     style={{
@@ -1726,136 +1335,104 @@ export default function LowWorkspacePage() {
                       color: '#ffffff',
                       border: 'none',
                       borderRadius: 6,
-                      padding: '4px 10px',
+                      padding: '3px 10px',
                       fontSize: 11,
                       fontWeight: 600,
                       cursor: 'pointer',
                     }}
                   >
-                    Save & Encrypt
+                    Save
                   </button>
+                )}
+              </div>
+
+              {showInspector && (
+                <div
+                  style={{
+                    backgroundColor: '#121216',
+                    borderBottom: '1px solid #1f1f24',
+                    padding: '8px 18px',
+                    fontSize: 11,
+                    color: '#a1a1aa',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <Lock size={12} color="#0088ff" />
+                    <span>v{activeDoc.version}</span>
+                    <span>AAD: {currentTenant.orgId}/{activeDoc.id}</span>
+                    <span
+                      style={{
+                        color: '#52525b',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        maxWidth: 340,
+                      }}
+                    >
+                      {rawCiphertexts[activeDoc.id]}
+                    </span>
+                  </div>
                   <button
                     onClick={() => void handleArchiveDocument(activeDoc)}
                     style={{
-                      backgroundColor: '#27171a',
+                      background: 'none',
+                      border: 'none',
                       color: '#f87171',
-                      border: '1px solid #451a23',
-                      borderRadius: 6,
-                      padding: '4px 10px',
-                      fontSize: 11,
-                      fontWeight: 600,
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
                       gap: 4,
+                      fontSize: 11,
+                      flexShrink: 0,
                     }}
                   >
                     <Archive size={12} />
-                    <span>Archive (HMAC)</span>
+                    <span>Archive</span>
                   </button>
-                </div>
-              </div>
-
-              {/* Ciphertext & AAD Inspector Drawer */}
-              {showCiphertextInspector && (
-                <div
-                  style={{
-                    backgroundColor: '#12161f',
-                    borderBottom: '1px solid #1e293b',
-                    padding: '10px 18px',
-                    fontSize: 11,
-                    color: '#93c5fd',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 4,
-                  }}
-                >
-                  <div style={{ fontWeight: 700 }}>
-                    At-Rest Firestore Encryption Proof (Principle 6)
-                  </div>
-                  <div>
-                    <strong>AAD Binding:</strong>{' '}
-                    <code>
-                      {currentTenant.orgId}/{activeDoc.id}
-                    </code>{' '}
-                    · <strong>Key Version:</strong> <code>v{activeDoc.keyVersion}</code> ·{' '}
-                    <strong>SHA-256:</strong> <code>{activeDoc.sha256}</code>
-                  </div>
-                  <div
-                    style={{
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      color: '#60a5fa',
-                    }}
-                  >
-                    <strong>Raw Firestore bodyCiphertext:</strong>{' '}
-                    <code>{rawCiphertexts[activeDoc.id] ?? '(encrypted)'}</code>
-                  </div>
                 </div>
               )}
 
-              {/* Version History Drawer */}
               {showVersionHistory && (
                 <div
                   style={{
-                    backgroundColor: '#141418',
-                    borderBottom: '1px solid #27272a',
-                    padding: '10px 18px',
-                    fontSize: 12,
+                    backgroundColor: '#121216',
+                    borderBottom: '1px solid #1f1f24',
+                    padding: '8px 18px',
+                    display: 'flex',
+                    gap: 8,
+                    overflowX: 'auto',
                   }}
                 >
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      marginBottom: 6,
-                      fontWeight: 600,
-                    }}
-                  >
-                    <span>Immutable Version History ({docVersions.length} versions)</span>
+                  {docVersions.map((ver) => (
                     <button
-                      onClick={() => setShowVersionHistory(false)}
+                      key={ver.version}
+                      onClick={() => setEditorBody(ver.body)}
                       style={{
-                        background: 'none',
-                        border: 'none',
-                        color: '#71717a',
+                        padding: '4px 10px',
+                        backgroundColor: '#1c1c21',
+                        border: '1px solid #2c2c32',
+                        borderRadius: 6,
                         cursor: 'pointer',
+                        fontSize: 11,
                       }}
                     >
-                      Close
+                      v{ver.version}
                     </button>
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, overflowX: 'auto' }}>
-                    {docVersions.map((ver) => (
-                      <div
-                        key={ver.version}
-                        onClick={() => {
-                          setEditorBody(ver.body);
-                          notify(`Loaded version v${ver.version} into editor`);
-                        }}
-                        style={{
-                          padding: '6px 10px',
-                          backgroundColor: '#1f1f24',
-                          borderRadius: 6,
-                          cursor: 'pointer',
-                          fontSize: 11,
-                          minWidth: 160,
-                        }}
-                      >
-                        <div style={{ fontWeight: 700 }}>
-                          Version {ver.version} · by {ver.writtenBy}
-                        </div>
-                        <div style={{ color: '#9ca3af', marginTop: 2 }}>
-                          {ver.body.slice(0, 42)}…
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  ))}
                 </div>
               )}
 
-              {/* Editor Textarea with Line Numbers (Matches Screenshot 2) */}
               <div
                 style={{
                   flex: 1,
@@ -1884,6 +1461,12 @@ export default function LowWorkspacePage() {
                 <textarea
                   value={editorBody}
                   onChange={(e) => setEditorBody(e.target.value)}
+                  onKeyDown={(e) => {
+                    if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+                      e.preventDefault();
+                      void handleSaveActiveDocument();
+                    }
+                  }}
                   style={{
                     flex: 1,
                     backgroundColor: 'transparent',
@@ -1898,7 +1481,6 @@ export default function LowWorkspacePage() {
                 />
               </div>
 
-              {/* Bottom Editor Status Bar (Matches Screenshot 2) */}
               <div
                 style={{
                   height: 28,
@@ -1908,7 +1490,6 @@ export default function LowWorkspacePage() {
                   justifyContent: 'space-between',
                   fontSize: 11,
                   color: '#71717a',
-                  borderTop: '1px solid #141417',
                 }}
               >
                 <span>Markdown</span>
@@ -1921,10 +1502,10 @@ export default function LowWorkspacePage() {
           )}
 
           {/* =============================================================== */}
-          {/* VIEW 3: LIST VIEW (Matches Screenshot 3)                        */}
+          {/* VIEW 3: MINIMAL LIST VIEW (Matches Screenshot 3)                */}
           {/* =============================================================== */}
           {viewMode === 'list' && (
-            <div style={{ flex: 1, padding: '12px 18px', overflowY: 'auto' }}>
+            <div style={{ flex: 1, padding: '14px 18px', overflowY: 'auto' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {liveFiles.map((file) => {
                   const parentLabel = file.parentId
@@ -1937,34 +1518,18 @@ export default function LowWorkspacePage() {
                       style={{
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '6px 8px',
-                        borderRadius: 8,
+                        gap: 10,
+                        padding: '4px 4px',
                         cursor: 'pointer',
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <FileText size={15} color="#a1a1aa" />
-                        <span style={{ fontSize: 13, color: '#e5e5e7', fontWeight: 500 }}>
-                          {file.name}
-                        </span>
-                        <span style={{ fontSize: 12, color: '#71717a' }}>
-                          {parentLabel}
-                        </span>
-                      </div>
-
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 10,
-                          fontSize: 11,
-                          color: '#52525b',
-                        }}
-                      >
-                        <span>v{file.version}</span>
-                        <span>{file.sizeBytes} B</span>
-                      </div>
+                      <FileText size={15} color="#a1a1aa" />
+                      <span style={{ fontSize: 13, color: '#e5e5e7' }}>
+                        {file.name}
+                      </span>
+                      <span style={{ fontSize: 12, color: '#71717a' }}>
+                        {parentLabel}
+                      </span>
                     </div>
                   );
                 })}
@@ -1976,7 +1541,7 @@ export default function LowWorkspacePage() {
           {/* VIEW 4: CALENDAR VIEW (Matches Screenshot 4)                    */}
           {/* =============================================================== */}
           {viewMode === 'calendar' && (
-            <div style={{ flex: 1, padding: '10px 24px', overflowY: 'auto' }}>
+            <div style={{ flex: 1, padding: '14px 24px', overflowY: 'auto' }}>
               <div
                 style={{
                   display: 'inline-flex',
@@ -1991,7 +1556,6 @@ export default function LowWorkspacePage() {
                 <ChevronDown size={13} color="#71717a" />
               </div>
 
-              {/* 6-Month Calendar Grid (January - June 2026) */}
               <div
                 style={{
                   display: 'grid',
@@ -2001,7 +1565,6 @@ export default function LowWorkspacePage() {
                   borderBottom: '1px solid #18181b',
                 }}
               >
-                {/* Day-of-week labels column */}
                 <div
                   style={{
                     display: 'flex',
@@ -2020,7 +1583,6 @@ export default function LowWorkspacePage() {
                 </div>
 
                 {CALENDAR_MONTHS_2026.map((month) => {
-                  // Arrange days into 7 rows (Mon..Sun) x 5 columns
                   const cols: Array<Array<number | null>> = [[], [], [], [], []];
                   for (let d = 1; d <= month.days; d++) {
                     const pos = month.startOffset + (d - 1);
@@ -2076,7 +1638,6 @@ export default function LowWorkspacePage() {
                 })}
               </div>
 
-              {/* Date Grouped Markdown Files (Matches Screenshot 4 bottom section) */}
               <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 18 }}>
                 <div>
                   <div
@@ -2194,57 +1755,13 @@ export default function LowWorkspacePage() {
                   transition: 'transform 0.15s ease',
                 }}
               >
-                {/* Edges from Vault center (450, 310) */}
-                <line
-                  x1={450}
-                  y1={310}
-                  x2={450}
-                  y2={180}
-                  stroke="#3f3f46"
-                  strokeWidth={1}
-                />
-                <line
-                  x1={450}
-                  y1={180}
-                  x2={450}
-                  y2={140}
-                  stroke="#3f3f46"
-                  strokeWidth={1}
-                />
-                <line
-                  x1={450}
-                  y1={180}
-                  x2={155}
-                  y2={310}
-                  stroke="#3f3f46"
-                  strokeWidth={1}
-                />
-                <line
-                  x1={450}
-                  y1={180}
-                  x2={745}
-                  y2={310}
-                  stroke="#3f3f46"
-                  strokeWidth={1}
-                />
-                <line
-                  x1={450}
-                  y1={310}
-                  x2={450}
-                  y2={445}
-                  stroke="#3f3f46"
-                  strokeWidth={1}
-                />
-                <line
-                  x1={450}
-                  y1={445}
-                  x2={450}
-                  y2={485}
-                  stroke="#3f3f46"
-                  strokeWidth={1}
-                />
+                <line x1={450} y1={310} x2={450} y2={180} stroke="#3f3f46" strokeWidth={1} />
+                <line x1={450} y1={180} x2={450} y2={140} stroke="#3f3f46" strokeWidth={1} />
+                <line x1={450} y1={180} x2={155} y2={310} stroke="#3f3f46" strokeWidth={1} />
+                <line x1={450} y1={180} x2={745} y2={310} stroke="#3f3f46" strokeWidth={1} />
+                <line x1={450} y1={310} x2={450} y2={445} stroke="#3f3f46" strokeWidth={1} />
+                <line x1={450} y1={445} x2={450} y2={485} stroke="#3f3f46" strokeWidth={1} />
 
-                {/* Center Vault Node */}
                 <circle cx={450} cy={310} r={9} fill="#d4d4d8" />
                 <text
                   x={450}
@@ -2257,44 +1774,17 @@ export default function LowWorkspacePage() {
                   Vault
                 </text>
 
-                {/* Folder node: test */}
                 <circle cx={450} cy={180} r={4.5} fill="#71717a" />
                 <text x={462} y={184} fill="#a1a1aa" fontSize={11}>
                   test
                 </text>
 
-                {/* File nodes around the graph */}
                 {[
-                  {
-                    doc: liveFiles[0],
-                    fallback: '2026-09-02 12-12-16.md',
-                    cx: 450,
-                    cy: 140,
-                  },
-                  {
-                    doc: liveFiles[3],
-                    fallback: '2026-09-07 19-45-14.md',
-                    cx: 155,
-                    cy: 310,
-                  },
-                  {
-                    doc: liveFiles[1],
-                    fallback: '2026-09-07 19-45-11.md',
-                    cx: 745,
-                    cy: 310,
-                  },
-                  {
-                    doc: liveFiles[4],
-                    fallback: '2026-09-07 19-45-33.md',
-                    cx: 450,
-                    cy: 445,
-                  },
-                  {
-                    doc: liveFiles[2],
-                    fallback: '2026-09-07 19-45-13.md',
-                    cx: 450,
-                    cy: 485,
-                  },
+                  { doc: liveFiles[0], fallback: '2026-09-02 12-12-16.md', cx: 450, cy: 140 },
+                  { doc: liveFiles[3], fallback: '2026-09-07 19-45-14.md', cx: 155, cy: 310 },
+                  { doc: liveFiles[1], fallback: '2026-09-07 19-45-11.md', cx: 745, cy: 310 },
+                  { doc: liveFiles[4], fallback: '2026-09-07 19-45-33.md', cx: 450, cy: 445 },
+                  { doc: liveFiles[2], fallback: '2026-09-07 19-45-13.md', cx: 450, cy: 485 },
                 ].map((node, idx) => (
                   <g
                     key={idx}
@@ -2302,19 +1792,13 @@ export default function LowWorkspacePage() {
                     style={{ cursor: 'pointer' }}
                   >
                     <circle cx={node.cx} cy={node.cy} r={4.5} fill="#71717a" />
-                    <text
-                      x={node.cx + 12}
-                      y={node.cy + 4}
-                      fill="#a1a1aa"
-                      fontSize={11}
-                    >
+                    <text x={node.cx + 12} y={node.cy + 4} fill="#a1a1aa" fontSize={11}>
                       {node.doc?.name ?? node.fallback}
                     </text>
                   </g>
                 ))}
               </svg>
 
-              {/* Bottom-Left Graph Zoom Pill (Matches Screenshot 5: `- 100% +`) */}
               <div
                 style={{
                   position: 'absolute',
@@ -2333,24 +1817,14 @@ export default function LowWorkspacePage() {
               >
                 <button
                   onClick={() => setGraphZoom((z) => Math.max(60, z - 10))}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: '#a1a1aa',
-                    cursor: 'pointer',
-                  }}
+                  style={{ background: 'none', border: 'none', color: '#a1a1aa', cursor: 'pointer' }}
                 >
                   -
                 </button>
                 <span>{graphZoom}%</span>
                 <button
                   onClick={() => setGraphZoom((z) => Math.min(160, z + 10))}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: '#a1a1aa',
-                    cursor: 'pointer',
-                  }}
+                  style={{ background: 'none', border: 'none', color: '#a1a1aa', cursor: 'pointer' }}
                 >
                   +
                 </button>
@@ -2359,450 +1833,222 @@ export default function LowWorkspacePage() {
           )}
 
           {/* =============================================================== */}
-          {/* VIEW 6: INBOX / GROUNDED MEMORY Q&A & REBUILD (Step 3)          */}
+          {/* VIEW 6: MINIMALIST INBOX (Memory Q&A)                           */}
           {/* =============================================================== */}
           {viewMode === 'inbox' && (
-            <div style={{ flex: 1, padding: '12px 24px', overflowY: 'auto' }}>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '2fr 1fr',
-                  gap: 20,
-                }}
-              >
-                <div
+            <div style={{ flex: 1, padding: '20px 24px', overflowY: 'auto', maxWidth: 760 }}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  value={memoryQuestion}
+                  onChange={(e) => setMemoryQuestion(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') void handleAskMemory();
+                  }}
+                  placeholder="Ask Vault memory..."
+                  style={{
+                    flex: 1,
+                    backgroundColor: '#131316',
+                    border: '1px solid #222226',
+                    borderRadius: 10,
+                    padding: '10px 14px',
+                    fontSize: 13,
+                    outline: 'none',
+                  }}
+                />
+                <button
+                  onClick={() => void handleAskMemory()}
+                  disabled={memoryLoading}
+                  style={{
+                    backgroundColor: '#0088ff',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: 10,
+                    padding: '0 16px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}
+                >
+                  <Send size={13} />
+                </button>
+                <button
+                  onClick={() => void handleRebuildDerived()}
+                  title={`Rebuild index (${chunkCount} chunks)`}
                   style={{
                     backgroundColor: '#131316',
                     border: '1px solid #222226',
-                    borderRadius: 14,
-                    padding: 20,
+                    borderRadius: 10,
+                    padding: '0 12px',
+                    color: '#8e8e93',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
                   }}
                 >
-                  <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>
-                    Grounded Memory Agent (Vector Search + Paragraph Citations)
-                  </h3>
-                  <p style={{ fontSize: 12, color: '#9ca3af', marginBottom: 14 }}>
-                    Answers strictly from chunks inside your organization’s declared
-                    Knowledge Collections. Cites exact <code>docId</code> and paragraph
-                    ordinal. Returns <em>Not found</em> when ungrounded.
-                  </p>
+                  <RefreshCw size={14} />
+                </button>
+              </div>
 
-                  {/* Preset Judge Evaluation Questions */}
-                  <div
+              <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+                {[
+                  'How quickly must production incidents be escalated?',
+                  'What threshold requires @berezovsky360 approval?',
+                  'What is the Tokyo office lunch menu?',
+                ].map((q) => (
+                  <button
+                    key={q}
+                    onClick={() => {
+                      setMemoryQuestion(q);
+                      void handleAskMemory(q);
+                    }}
                     style={{
-                      display: 'flex',
-                      flexWrap: 'wrap',
-                      gap: 6,
-                      marginBottom: 12,
+                      backgroundColor: '#131316',
+                      border: '1px solid #1f1f24',
+                      borderRadius: 6,
+                      padding: '4px 9px',
+                      fontSize: 11,
+                      color: '#8e8e93',
+                      cursor: 'pointer',
                     }}
                   >
-                    {[
-                      'How quickly must production incidents be escalated?',
-                      'What threshold of vendor contracts requires @berezovsky360 approval?',
-                      'What is the dental insurance deductible in Tokyo? (Ungrounded Test)',
-                    ].map((preset) => (
-                      <button
-                        key={preset}
-                        onClick={() => {
-                          setMemoryQuestion(preset);
-                          void handleAskMemory(preset);
-                        }}
-                        style={{
-                          backgroundColor: '#1c1c21',
-                          border: '1px solid #2c2c32',
-                          borderRadius: 6,
-                          padding: '5px 10px',
-                          fontSize: 11,
-                          color: '#d4d4d8',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        {preset}
-                      </button>
-                    ))}
-                  </div>
+                    {q}
+                  </button>
+                ))}
+              </div>
 
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <input
-                      value={memoryQuestion}
-                      onChange={(e) => setMemoryQuestion(e.target.value)}
-                      style={{
-                        flex: 1,
-                        backgroundColor: '#1c1c21',
-                        border: '1px solid #2e2e36',
-                        borderRadius: 8,
-                        padding: '10px 12px',
-                        fontSize: 13,
-                      }}
-                    />
-                    <button
-                      onClick={() => void handleAskMemory()}
-                      style={{
-                        backgroundColor: '#0088ff',
-                        color: '#ffffff',
-                        border: 'none',
-                        borderRadius: 8,
-                        padding: '0 18px',
-                        fontSize: 13,
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      Run Grounded Query
-                    </button>
-                  </div>
+              {memoryAnswer && (
+                <div
+                  style={{
+                    marginTop: 18,
+                    padding: 16,
+                    borderRadius: 12,
+                    backgroundColor: '#131316',
+                    border: '1px solid #222226',
+                    fontSize: 13,
+                    lineHeight: 1.6,
+                  }}
+                >
+                  <ReactMarkdown>{memoryAnswer.answerMarkdown}</ReactMarkdown>
 
-                  {memoryAnswer && (
-                    <div
-                      style={{
-                        marginTop: 16,
-                        padding: 16,
-                        borderRadius: 10,
-                        backgroundColor: memoryAnswer.notFound
-                          ? '#23171b'
-                          : '#131d2e',
-                        border: memoryAnswer.notFound
-                          ? '1px solid #4c1d24'
-                          : '1px solid #1e3a5f',
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          fontSize: 11,
-                          marginBottom: 8,
-                          color: memoryAnswer.notFound ? '#fca5a5' : '#93c5fd',
-                          fontWeight: 700,
-                        }}
-                      >
-                        <span>
-                          {memoryAnswer.notFound
-                            ? 'UNGROUNDED QUERY REJECTED (NOT FOUND)'
-                            : `GROUNDED ANSWER (${memoryAnswer.citations.length} CITATIONS)`}
+                  {memoryAnswer.citations.length > 0 && (
+                    <div style={{ display: 'flex', gap: 6, marginTop: 12, flexWrap: 'wrap' }}>
+                      {memoryAnswer.citations.map((c, idx) => (
+                        <span
+                          key={idx}
+                          onClick={() => {
+                            const target = documents.find((d) => d.id === c.docId);
+                            if (target) openDocumentInEditor(target);
+                          }}
+                          style={{
+                            fontSize: 11,
+                            padding: '3px 8px',
+                            borderRadius: 6,
+                            backgroundColor: '#1c1c21',
+                            color: '#60a5fa',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {c.documentName} §{c.paragraphOrdinal}
                         </span>
-                        <span>
-                          Model: {memoryAnswer.model} · {memoryAnswer.latencyMs}ms
-                        </span>
-                      </div>
-                      <div style={{ fontSize: 13, lineHeight: 1.6 }}>
-                        <ReactMarkdown>{memoryAnswer.answerMarkdown}</ReactMarkdown>
-                      </div>
+                      ))}
                     </div>
                   )}
                 </div>
-
-                {/* Principle 1: Rebuild Derived Index Card */}
-                <div
-                  style={{
-                    backgroundColor: '#131316',
-                    border: '1px solid #222226',
-                    borderRadius: 14,
-                    padding: 20,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                  }}
-                >
-                  <div>
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        fontSize: 14,
-                        fontWeight: 700,
-                        marginBottom: 8,
-                      }}
-                    >
-                      <Database size={16} color="#0088ff" />
-                      <span>Principle 1: Markdown Source of Truth</span>
-                    </div>
-                    <p style={{ fontSize: 12, color: '#9ca3af', lineHeight: 1.5 }}>
-                      Chunks and vector embeddings are strictly derived. You can wipe
-                      every vector chunk in Firestore and rebuild the entire semantic
-                      index from the encrypted Markdown files alone.
-                    </p>
-                    <div
-                      style={{
-                        marginTop: 14,
-                        padding: 12,
-                        borderRadius: 8,
-                        backgroundColor: '#1a1a1f',
-                        fontSize: 12,
-                      }}
-                    >
-                      <div>
-                        Active Collections: <strong>{collections.length}</strong>
-                      </div>
-                      <div style={{ marginTop: 4 }}>
-                        Live Vector Chunks: <strong>{chunkCount}</strong>
-                      </div>
-                    </div>
-                    {rebuildNotice && (
-                      <div
-                        style={{
-                          marginTop: 10,
-                          padding: 10,
-                          borderRadius: 8,
-                          backgroundColor: '#11261d',
-                          color: '#6ee7b7',
-                          fontSize: 11,
-                        }}
-                      >
-                        {rebuildNotice}
-                      </div>
-                    )}
-                  </div>
-
-                  <button
-                    onClick={() => void handleRebuildDerived()}
-                    style={{
-                      marginTop: 16,
-                      backgroundColor: '#1f2937',
-                      color: '#60a5fa',
-                      border: '1px solid #374151',
-                      borderRadius: 8,
-                      padding: '10px 14px',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 8,
-                    }}
-                  >
-                    <RefreshCw size={14} />
-                    <span>Delete All Chunks & Rebuild Index</span>
-                  </button>
-                </div>
-              </div>
+              )}
             </div>
           )}
 
           {/* =============================================================== */}
-          {/* VIEW 7: CODE / APP BUILDER, AGENT DIFF, AUTOMATION & AUDIT      */}
+          {/* VIEW 7: MINIMALIST CODE / APP BUILDER                           */}
           {/* =============================================================== */}
-          {viewMode === 'code' && (
+          {viewMode === 'code' && activeApp && (
             <div
               style={{
                 flex: 1,
-                padding: '10px 24px 32px 24px',
+                padding: '16px 24px',
                 overflowY: 'auto',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: 20,
+                gap: 16,
               }}
             >
-              {activeApp ? (
-                <>
-                  {/* App Header + Publish Snapshot + Run Cloud Run Job */}
-                  <div
-                    style={{
-                      backgroundColor: '#131316',
-                      border: '1px solid #222226',
-                      borderRadius: 14,
-                      padding: 18,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                    }}
-                  >
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <h3 style={{ fontSize: 16, fontWeight: 700 }}>
-                          {activeApp.draftDefinition.name}
-                        </h3>
-                        <span
-                          style={{
-                            fontSize: 11,
-                            padding: '2px 8px',
-                            borderRadius: 6,
-                            backgroundColor: '#11261d',
-                            color: '#6ee7b7',
-                            fontWeight: 600,
-                          }}
-                        >
-                          {activeApp.status.toUpperCase()} · Snapshot v
-                          {activeApp.publishedSnapshotVersion ?? 1} (Draft v
-                          {activeApp.version})
-                        </span>
-                      </div>
-                      <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 4 }}>
-                        {activeApp.draftDefinition.description}
-                      </p>
-                    </div>
-
-                    <div style={{ display: 'flex', gap: 10 }}>
-                      <button
-                        onClick={() => void handleRunAutomationJob(activeApp.id)}
-                        style={{
-                          backgroundColor: '#1e293b',
-                          color: '#93c5fd',
-                          border: '1px solid #334155',
-                          borderRadius: 8,
-                          padding: '8px 12px',
-                          fontSize: 12,
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 6,
-                        }}
-                      >
-                        <Play size={13} />
-                        <span>Run Cloud Run Automation Job</span>
-                      </button>
-
-                      <button
-                        onClick={() => void handlePublishApp(activeApp)}
-                        style={{
-                          backgroundColor: '#0088ff',
-                          color: '#ffffff',
-                          border: 'none',
-                          borderRadius: 8,
-                          padding: '8px 14px',
-                          fontSize: 12,
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                        }}
-                      >
-                        Publish Snapshot (HMAC Approval)
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Step 5: Builder Agent Validated Diff Proposal */}
-                  <div
-                    style={{
-                      backgroundColor: '#131316',
-                      border: '1px solid #222226',
-                      borderRadius: 14,
-                      padding: 18,
-                    }}
-                  >
-                    <div
+              {/* Minimal Sub-nav */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {(['app', 'builder', 'audit'] as const).map((tab) => (
+                    <button
+                      key={tab}
+                      onClick={() => setCodeTab(tab)}
                       style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        marginBottom: 10,
+                        backgroundColor: codeTab === tab ? '#1f1f24' : 'transparent',
+                        border: '1px solid #222226',
+                        borderRadius: 8,
+                        padding: '5px 12px',
+                        fontSize: 12,
+                        color: codeTab === tab ? '#f4f4f6' : '#8e8e93',
+                        cursor: 'pointer',
+                        textTransform: 'capitalize',
                       }}
                     >
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 8,
-                          fontSize: 13,
-                          fontWeight: 700,
-                          color: '#60a5fa',
-                        }}
-                      >
-                        <GitCompare size={15} />
-                        <span>
-                          Step 5: Builder Agent (Tools: read, validate, preview only)
-                        </span>
-                      </div>
-                      <span style={{ fontSize: 11, color: '#71717a' }}>
-                        Registered Palette: page, section, tabs, text_field, select,
-                        date, number, button, form, table, kanban, calendar,
-                        detail_view, metric, markdown_block, agent_chat
-                      </span>
-                    </div>
+                      {tab}
+                    </button>
+                  ))}
+                </div>
 
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <input
-                        value={builderInstruction}
-                        onChange={(e) => setBuilderInstruction(e.target.value)}
-                        style={{
-                          flex: 1,
-                          backgroundColor: '#1c1c21',
-                          border: '1px solid #2c2c32',
-                          borderRadius: 8,
-                          padding: '8px 12px',
-                          fontSize: 12,
-                        }}
-                      />
-                      <button
-                        onClick={() => void handleProposeDiff(activeApp.id)}
-                        style={{
-                          backgroundColor: '#1f2937',
-                          color: '#e5e5e7',
-                          border: '1px solid #374151',
-                          borderRadius: 8,
-                          padding: '0 14px',
-                          fontSize: 12,
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                        }}
-                      >
-                        Propose Validated Diff
-                      </button>
-                    </div>
-
-                    {proposedDiff && (
-                      <div
-                        style={{
-                          marginTop: 12,
-                          padding: 12,
-                          borderRadius: 8,
-                          backgroundColor: '#182232',
-                          border: '1px solid #1e3a5f',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                        }}
-                      >
-                        <div style={{ fontSize: 12 }}>
-                          <div style={{ fontWeight: 700, color: '#93c5fd' }}>
-                            {proposedDiff.summary}
-                          </div>
-                          <div style={{ fontSize: 11, color: '#cbd5e1', marginTop: 2 }}>
-                            Added IDs: {proposedDiff.addedComponentIds.join(', ') || 'none'}{' '}
-                            · Validated against closed Zod <code>AppDefinitionSchema.strict()</code>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => void handleApplyDiff()}
-                          style={{
-                            backgroundColor: '#10b981',
-                            color: '#06281e',
-                            border: 'none',
-                            borderRadius: 6,
-                            padding: '6px 12px',
-                            fontSize: 12,
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                          }}
-                        >
-                          Explicitly Apply Diff
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Deterministic Runtime: Metrics + Kanban + Encrypted Markdown Records */}
-                  <div
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    onClick={() => void handleRunAutomationJob(activeApp.id)}
                     style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(3, 1fr)',
-                      gap: 14,
+                      backgroundColor: '#131316',
+                      border: '1px solid #222226',
+                      borderRadius: 8,
+                      padding: '5px 10px',
+                      fontSize: 11,
+                      color: '#a1a1aa',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 5,
                     }}
                   >
+                    <Play size={12} />
+                    <span>Run Job</span>
+                  </button>
+                  <button
+                    onClick={() => void handlePublishApp(activeApp)}
+                    style={{
+                      backgroundColor: '#0088ff',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: 8,
+                      padding: '5px 12px',
+                      fontSize: 11,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Publish v{activeApp.publishedSnapshotVersion ?? 1}
+                  </button>
+                </div>
+              </div>
+
+              {codeTab === 'app' && (
+                <>
+                  {/* Minimal Metrics + Quick Record Input */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr', gap: 12 }}>
                     <div
                       style={{
                         backgroundColor: '#131316',
-                        border: '1px solid #222226',
+                        border: '1px solid #1f1f24',
                         borderRadius: 12,
-                        padding: 16,
+                        padding: 14,
                       }}
                     >
-                      <div style={{ fontSize: 11, color: '#9ca3af' }}>
-                        Total Pipeline Value (Metric Component)
-                      </div>
-                      <div style={{ fontSize: 22, fontWeight: 800, marginTop: 4 }}>
+                      <div style={{ fontSize: 11, color: '#71717a' }}>Pipeline</div>
+                      <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>
                         $
                         {activeAppRecords
                           .reduce((acc, r) => acc + Number(r.fields.amount ?? 0), 0)
@@ -2813,87 +2059,74 @@ export default function LowWorkspacePage() {
                     <div
                       style={{
                         backgroundColor: '#131316',
-                        border: '1px solid #222226',
+                        border: '1px solid #1f1f24',
                         borderRadius: 12,
-                        padding: 16,
+                        padding: 14,
                       }}
                     >
-                      <div style={{ fontSize: 11, color: '#9ca3af' }}>
-                        Encrypted Markdown Records
-                      </div>
-                      <div style={{ fontSize: 22, fontWeight: 800, marginTop: 4 }}>
-                        {activeAppRecords.length} Records
+                      <div style={{ fontSize: 11, color: '#71717a' }}>Records</div>
+                      <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>
+                        {activeAppRecords.length}
                       </div>
                     </div>
 
                     <div
                       style={{
                         backgroundColor: '#131316',
-                        border: '1px solid #222226',
+                        border: '1px solid #1f1f24',
                         borderRadius: 12,
-                        padding: 16,
+                        padding: 14,
                         display: 'flex',
-                        flexDirection: 'column',
-                        gap: 6,
+                        alignItems: 'center',
+                        gap: 8,
                       }}
                     >
-                      <div style={{ fontSize: 11, color: '#9ca3af' }}>
-                        Quick Add Encrypted Record
-                      </div>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <input
-                          value={newDealTitle}
-                          onChange={(e) => setNewDealTitle(e.target.value)}
-                          placeholder="Deal name..."
-                          style={{
-                            flex: 1,
-                            backgroundColor: '#1c1c21',
-                            border: '1px solid #2c2c32',
-                            borderRadius: 6,
-                            padding: '5px 8px',
-                            fontSize: 12,
-                          }}
-                        />
-                        <input
-                          value={newDealAmount}
-                          onChange={(e) => setNewDealAmount(e.target.value)}
-                          placeholder="$"
-                          style={{
-                            width: 74,
-                            backgroundColor: '#1c1c21',
-                            border: '1px solid #2c2c32',
-                            borderRadius: 6,
-                            padding: '5px 8px',
-                            fontSize: 12,
-                          }}
-                        />
-                        <button
-                          onClick={() => void handleCreateDealRecord(activeApp.id)}
-                          style={{
-                            backgroundColor: '#0088ff',
-                            color: '#ffffff',
-                            border: 'none',
-                            borderRadius: 6,
-                            padding: '0 10px',
-                            fontSize: 12,
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                          }}
-                        >
-                          Add
-                        </button>
-                      </div>
+                      <input
+                        value={newDealTitle}
+                        onChange={(e) => setNewDealTitle(e.target.value)}
+                        placeholder="New record..."
+                        style={{
+                          flex: 1,
+                          backgroundColor: '#1c1c21',
+                          border: 'none',
+                          borderRadius: 7,
+                          padding: '7px 10px',
+                          fontSize: 12,
+                          outline: 'none',
+                        }}
+                      />
+                      <input
+                        value={newDealAmount}
+                        onChange={(e) => setNewDealAmount(e.target.value)}
+                        style={{
+                          width: 80,
+                          backgroundColor: '#1c1c21',
+                          border: 'none',
+                          borderRadius: 7,
+                          padding: '7px 10px',
+                          fontSize: 12,
+                          outline: 'none',
+                        }}
+                      />
+                      <button
+                        onClick={() => void handleCreateDealRecord(activeApp.id)}
+                        style={{
+                          backgroundColor: '#0088ff',
+                          color: '#ffffff',
+                          border: 'none',
+                          borderRadius: 7,
+                          padding: '7px 12px',
+                          fontSize: 12,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Add
+                      </button>
                     </div>
                   </div>
 
-                  {/* Kanban Board (Step 4 & Step 7 Status Transitions with Named Approver) */}
-                  <div
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(3, 1fr)',
-                      gap: 14,
-                    }}
-                  >
+                  {/* Minimal Kanban */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
                     {['Draft', 'In Review', 'Approved'].map((stage) => {
                       const stageRecords = activeAppRecords.filter(
                         (r) => String(r.fields.status) === stage
@@ -2903,71 +2136,51 @@ export default function LowWorkspacePage() {
                           key={stage}
                           style={{
                             backgroundColor: '#131316',
-                            border: '1px solid #222226',
+                            border: '1px solid #1f1f24',
                             borderRadius: 12,
-                            padding: 14,
+                            padding: 12,
                           }}
                         >
                           <div
                             style={{
                               display: 'flex',
                               justifyContent: 'space-between',
-                              fontSize: 12,
-                              fontWeight: 700,
+                              fontSize: 11,
+                              color: '#8e8e93',
                               marginBottom: 10,
                             }}
                           >
                             <span>{stage}</span>
-                            <span style={{ color: '#71717a' }}>{stageRecords.length}</span>
+                            <span>{stageRecords.length}</span>
                           </div>
 
-                          <div
-                            style={{
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: 10,
-                            }}
-                          >
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                             {stageRecords.map((rec) => (
                               <div
                                 key={rec.id}
                                 style={{
-                                  backgroundColor: '#1b1b20',
-                                  border: '1px solid #27272e',
+                                  backgroundColor: '#1a1a1f',
                                   borderRadius: 8,
-                                  padding: 12,
+                                  padding: 10,
                                   fontSize: 12,
                                 }}
                               >
-                                <div style={{ fontWeight: 700 }}>
+                                <div style={{ fontWeight: 600 }}>
                                   {String(rec.fields.title ?? rec.id)}
                                 </div>
                                 <div
                                   style={{
-                                    color: '#60a5fa',
-                                    fontSize: 11,
-                                    marginTop: 4,
-                                  }}
-                                >
-                                  ${Number(rec.fields.amount ?? 0).toLocaleString()} · v
-                                  {rec.version}
-                                </div>
-                                <div
-                                  style={{
-                                    fontSize: 11,
-                                    color: '#9ca3af',
-                                    marginTop: 6,
-                                  }}
-                                >
-                                  {rec.notesMarkdown}
-                                </div>
-                                <div
-                                  style={{
                                     display: 'flex',
-                                    gap: 6,
-                                    marginTop: 10,
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    marginTop: 6,
+                                    fontSize: 11,
+                                    color: '#71717a',
                                   }}
                                 >
+                                  <span>
+                                    ${Number(rec.fields.amount ?? 0).toLocaleString()}
+                                  </span>
                                   {stage === 'Draft' && (
                                     <button
                                       onClick={() =>
@@ -2978,16 +2191,14 @@ export default function LowWorkspacePage() {
                                         )
                                       }
                                       style={{
-                                        backgroundColor: '#1f2937',
-                                        color: '#93c5fd',
-                                        border: '1px solid #374151',
-                                        borderRadius: 5,
-                                        padding: '4px 8px',
+                                        background: 'none',
+                                        border: 'none',
+                                        color: '#0088ff',
                                         fontSize: 11,
                                         cursor: 'pointer',
                                       }}
                                     >
-                                      Submit for Review →
+                                      Review →
                                     </button>
                                   )}
                                   {stage === 'In Review' && (
@@ -3000,16 +2211,14 @@ export default function LowWorkspacePage() {
                                         )
                                       }
                                       style={{
-                                        backgroundColor: '#11261d',
-                                        color: '#6ee7b7',
-                                        border: '1px solid #065f46',
-                                        borderRadius: 5,
-                                        padding: '4px 8px',
+                                        background: 'none',
+                                        border: 'none',
+                                        color: '#10b981',
                                         fontSize: 11,
                                         cursor: 'pointer',
                                       }}
                                     >
-                                      Approve (@berezovsky360) →
+                                      Approve →
                                     </button>
                                   )}
                                 </div>
@@ -3020,229 +2229,120 @@ export default function LowWorkspacePage() {
                       );
                     })}
                   </div>
-
-                  {/* Step 7: Append-Only Audit Log */}
-                  <div
-                    style={{
-                      backgroundColor: '#131316',
-                      border: '1px solid #222226',
-                      borderRadius: 14,
-                      padding: 18,
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: 13,
-                        fontWeight: 700,
-                        marginBottom: 10,
-                      }}
-                    >
-                      Step 7: Append-Only Organization Audit Log ({auditEvents.length}{' '}
-                      immutable events)
-                    </div>
-                    <div
-                      style={{
-                        maxHeight: 200,
-                        overflowY: 'auto',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 6,
-                      }}
-                    >
-                      {auditEvents.map((ev) => (
-                        <div
-                          key={ev.id}
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            padding: '6px 10px',
-                            backgroundColor: '#1a1a1f',
-                            borderRadius: 6,
-                            fontSize: 11,
-                          }}
-                        >
-                          <div>
-                            <strong style={{ color: '#60a5fa' }}>{ev.action}</strong> on{' '}
-                            <code>
-                              {ev.targetType}:{ev.targetId}
-                            </code>{' '}
-                            by <strong>{ev.actor}</strong>
-                          </div>
-                          <span style={{ color: '#71717a' }}>{ev.createdAt}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
                 </>
-              ) : (
-                <div style={{ fontSize: 13, color: '#9ca3af' }}>
-                  No apps created in this tenant yet.
+              )}
+
+              {codeTab === 'builder' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 640 }}>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input
+                      value={builderInstruction}
+                      onChange={(e) => setBuilderInstruction(e.target.value)}
+                      placeholder="Propose component diff (e.g. Add metric, Add calendar)..."
+                      style={{
+                        flex: 1,
+                        backgroundColor: '#131316',
+                        border: '1px solid #222226',
+                        borderRadius: 8,
+                        padding: '8px 12px',
+                        fontSize: 12,
+                        outline: 'none',
+                      }}
+                    />
+                    <button
+                      onClick={() => void handleProposeDiff(activeApp.id)}
+                      style={{
+                        backgroundColor: '#1f1f24',
+                        border: '1px solid #2c2c32',
+                        borderRadius: 8,
+                        padding: '0 14px',
+                        fontSize: 12,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Preview Diff
+                    </button>
+                  </div>
+
+                  {proposedDiff && (
+                    <div
+                      style={{
+                        padding: 12,
+                        borderRadius: 10,
+                        backgroundColor: '#131316',
+                        border: '1px solid #222226',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        fontSize: 12,
+                      }}
+                    >
+                      <span>{proposedDiff.summary}</span>
+                      <button
+                        onClick={() => void handleApplyDiff()}
+                        style={{
+                          backgroundColor: '#0088ff',
+                          color: '#ffffff',
+                          border: 'none',
+                          borderRadius: 6,
+                          padding: '5px 12px',
+                          fontSize: 11,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Apply
+                      </button>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {activeApp.draftDefinition.components.map((c) => (
+                      <span
+                        key={c.id}
+                        style={{
+                          padding: '4px 8px',
+                          borderRadius: 6,
+                          backgroundColor: '#131316',
+                          border: '1px solid #1f1f24',
+                          fontSize: 11,
+                          color: '#a1a1aa',
+                        }}
+                      >
+                        {c.type}: {c.label ?? c.id}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {codeTab === 'audit' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {auditEvents.map((ev) => (
+                    <div
+                      key={ev.id}
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        padding: '6px 10px',
+                        backgroundColor: '#131316',
+                        borderRadius: 6,
+                        fontSize: 11,
+                        color: '#a1a1aa',
+                      }}
+                    >
+                      <span>
+                        {ev.action} · {ev.targetId}
+                      </span>
+                      <span style={{ color: '#52525b' }}>{ev.actor}</span>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
           )}
 
           {/* =============================================================== */}
-          {/* VIEW 8: HACKATHON JUDGE CONSOLE (Interactive Proof Suite)        */}
-          {/* =============================================================== */}
-          {viewMode === 'judge' && (
-            <div
-              style={{
-                flex: 1,
-                padding: '12px 24px 32px 24px',
-                overflowY: 'auto',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 16,
-              }}
-            >
-              <div
-                style={{
-                  backgroundColor: '#131c2e',
-                  border: '1px solid #1e3a5f',
-                  borderRadius: 14,
-                  padding: 18,
-                  display: ' flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                }}
-              >
-                <div>
-                  <h3 style={{ fontSize: 16, fontWeight: 800, color: '#93c5fd' }}>
-                    LOW on Google Cloud — Hackathon Evaluation & Proof Dashboard
-                  </h3>
-                  <p style={{ fontSize: 12, color: '#cbd5e1', marginTop: 4 }}>
-                    Every principle and acceptance criterion is live and verifiable below
-                    or via <code>npm test</code> (16/16 automated tests passing).
-                  </p>
-                </div>
-                <a
-                  href={`/api/export?orgId=${encodeURIComponent(
-                    currentTenant.orgId
-                  )}&uid=${encodeURIComponent(currentTenant.uid)}&role=${encodeURIComponent(
-                    currentTenant.role
-                  )}`}
-                  style={{
-                    backgroundColor: '#0088ff',
-                    color: '#ffffff',
-                    padding: '9px 14px',
-                    borderRadius: 8,
-                    fontSize: 12,
-                    fontWeight: 700,
-                    textDecoration: 'none',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                  }}
-                >
-                  <Download size={14} />
-                  <span>1-Click Portable .zip Export</span>
-                </a>
-              </div>
-
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
-                  gap: 14,
-                }}
-              >
-                {[
-                  {
-                    title: '1. Markdown Source of Truth & Rebuild',
-                    desc: 'All documents and app records are pure Markdown. Chunks and embeddings can be wiped and rebuilt identically via scripts/rebuild-derived.ts.',
-                    actionLabel: 'Test Live Index Rebuild',
-                    onAction: () => void handleRebuildDerived(),
-                  },
-                  {
-                    title: '2. Dual-Enforced Tenant Isolation',
-                    desc: 'Enforced in firestore.rules (request.auth.token.orgId == orgId) AND in the single server repository module (FirestoreRepository).',
-                    actionLabel:
-                      activeTenantIdx === 0
-                        ? 'Switch to Isolated Tenant B (@beta_admin)'
-                        : 'Switch back to Tenant A (@berezovsky360)',
-                    onAction: () => {
-                      setActiveTenantIdx((i) => (i === 0 ? 1 : 0));
-                    },
-                  },
-                  {
-                    title: '3. KMS Envelope Encryption + AAD Binding',
-                    desc: 'Per-organization AES-256-GCM data key wrapped by Cloud KMS. Ciphertext is bound to orgId/docId via AAD so cross-tenant copy fails.',
-                    actionLabel: 'Inspect Raw Ciphertext in Editor',
-                    onAction: () => {
-                      setShowCiphertextInspector(true);
-                      if (liveFiles[0]) openDocumentInEditor(liveFiles[0]);
-                    },
-                  },
-                  {
-                    title: '4. Grounded Memory & Anti-Hallucination',
-                    desc: 'Answers cite exact docId and paragraph ordinal. Questions outside the Knowledge Collection return "Not found" on evaluation sets.',
-                    actionLabel: 'Open Grounded Memory Evaluation',
-                    onAction: () => setViewMode('inbox'),
-                  },
-                ].map((card, i) => (
-                  <div
-                    key={i}
-                    style={{
-                      backgroundColor: '#131316',
-                      border: '1px solid #222226',
-                      borderRadius: 12,
-                      padding: 16,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'space-between',
-                    }}
-                  >
-                    <div>
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 6,
-                          fontSize: 13,
-                          fontWeight: 700,
-                          color: '#f4f4f6',
-                        }}
-                      >
-                        <CheckCircle2 size={15} color="#10b981" />
-                        <span>{card.title}</span>
-                      </div>
-                      <p
-                        style={{
-                          fontSize: 12,
-                          color: '#9ca3af',
-                          marginTop: 6,
-                          lineHeight: 1.5,
-                        }}
-                      >
-                        {card.desc}
-                      </p>
-                    </div>
-                    <button
-                      onClick={card.onAction}
-                      style={{
-                        marginTop: 12,
-                        backgroundColor: '#1f2937',
-                        color: '#60a5fa',
-                        border: '1px solid #374151',
-                        borderRadius: 7,
-                        padding: '7px 12px',
-                        fontSize: 12,
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        alignSelf: 'flex-start',
-                      }}
-                    >
-                      {card.actionLabel}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* =============================================================== */}
-          {/* FLOATING BOTTOM-RIGHT MIC & + BUTTONS (Matches Screenshots 1-5) */}
+          {/* FLOATING BOTTOM-RIGHT MIC & + BUTTONS                           */}
           {/* =============================================================== */}
           <div
             style={{
@@ -3256,10 +2356,8 @@ export default function LowWorkspacePage() {
               zIndex: 20,
             }}
           >
-            {/* Dark Circular Microphone Button (Step 2: Audio Capture) */}
             <button
               onClick={() => setMicModalOpen(true)}
-              title="Capture & Transcribe Audio Note with Gemini"
               style={{
                 width: 44,
                 height: 44,
@@ -3271,17 +2369,14 @@ export default function LowWorkspacePage() {
                 alignItems: 'center',
                 justifyContent: 'center',
                 cursor: 'pointer',
-                boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
               }}
             >
               <Mic size={18} />
             </button>
 
-            {/* Bright Blue Circular + Button (Step 1: Create File / Folder) */}
             {viewMode !== 'editor' && (
               <button
                 onClick={() => setNewFileModalOpen(true)}
-                title="Create Markdown File or Folder"
                 style={{
                   width: 48,
                   height: 48,
@@ -3293,7 +2388,6 @@ export default function LowWorkspacePage() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   cursor: 'pointer',
-                  boxShadow: '0 6px 20px rgba(0, 136, 255, 0.45)',
                 }}
               >
                 <Plus size={22} />
@@ -3303,14 +2397,14 @@ export default function LowWorkspacePage() {
         </main>
 
         {/* ================================================================= */}
-        {/* RIGHT SIDEBAR (Matches Screenshots 1-5: Inbox, Code, Vaults, Bin) */}
+        {/* RIGHT SIDEBAR (Matches Screenshots 1-5)                           */}
         {/* ================================================================= */}
         {sidebarOpen && (
           <aside
             style={{
               width: 280,
               backgroundColor: '#111113',
-              borderLeft: '1px solid #1c1c1f',
+              borderLeft: '1px solid #18181b',
               padding: '12px 10px',
               display: 'flex',
               flexDirection: 'column',
@@ -3319,21 +2413,19 @@ export default function LowWorkspacePage() {
               flexShrink: 0,
             }}
           >
-            {/* Inbox Pill Button */}
             <button
               onClick={() => setViewMode('inbox')}
               style={{
                 width: '100%',
                 height: 36,
-                backgroundColor: viewMode === 'inbox' ? '#1f2937' : '#18181b',
-                border: '1px solid #242429',
+                backgroundColor: '#18181b',
+                border: '1px solid #222226',
                 borderRadius: 9,
                 padding: '0 12px',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 10,
                 fontSize: 12,
-                fontWeight: 500,
                 color: '#d4d4d8',
                 cursor: 'pointer',
               }}
@@ -3342,21 +2434,19 @@ export default function LowWorkspacePage() {
               <span>Inbox</span>
             </button>
 
-            {/* Code Pill Button */}
             <button
               onClick={() => setViewMode('code')}
               style={{
                 width: '100%',
                 height: 36,
-                backgroundColor: viewMode === 'code' ? '#1f2937' : '#18181b',
-                border: '1px solid #242429',
+                backgroundColor: '#18181b',
+                border: '1px solid #222226',
                 borderRadius: 9,
                 padding: '0 12px',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 10,
                 fontSize: 12,
-                fontWeight: 500,
                 color: '#d4d4d8',
                 cursor: 'pointer',
               }}
@@ -3365,7 +2455,6 @@ export default function LowWorkspacePage() {
               <span>Code</span>
             </button>
 
-            {/* Vaults Tree Section */}
             <div style={{ marginTop: 6 }}>
               <div
                 onClick={() => setVaultsExpanded((v) => !v)}
@@ -3380,11 +2469,7 @@ export default function LowWorkspacePage() {
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  {vaultsExpanded ? (
-                    <ChevronDown size={12} />
-                  ) : (
-                    <ChevronRight size={12} />
-                  )}
+                  {vaultsExpanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
                   <span>Vaults</span>
                 </div>
                 <button
@@ -3393,7 +2478,6 @@ export default function LowWorkspacePage() {
                     setNewItemKind('folder');
                     setNewFileModalOpen(true);
                   }}
-                  title="New Folder"
                   style={{
                     background: 'none',
                     border: 'none',
@@ -3415,11 +2499,8 @@ export default function LowWorkspacePage() {
                     paddingLeft: 6,
                   }}
                 >
-                  {/* Folders */}
                   {liveFolders.map((folder) => {
-                    const children = liveFiles.filter(
-                      (f) => f.parentId === folder.id
-                    );
+                    const children = liveFiles.filter((f) => f.parentId === folder.id);
                     const isOpen = expandedFolders[folder.id] ?? true;
                     return (
                       <div key={folder.id}>
@@ -3441,13 +2522,7 @@ export default function LowWorkspacePage() {
                             color: '#d4d4d8',
                           }}
                         >
-                          <div
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 7,
-                            }}
-                          >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                             {isOpen ? (
                               <ChevronDown size={11} color="#71717a" />
                             ) : (
@@ -3510,7 +2585,6 @@ export default function LowWorkspacePage() {
                     );
                   })}
 
-                  {/* Root-level Markdown files */}
                   {liveFiles
                     .filter((f) => f.parentId === null)
                     .map((file) => {
@@ -3529,9 +2603,6 @@ export default function LowWorkspacePage() {
                             cursor: 'pointer',
                             fontSize: 12,
                             backgroundColor: isSelected ? '#1c1c21' : 'transparent',
-                            border: isSelected
-                              ? '1px solid #27272e'
-                              : '1px solid transparent',
                             color: isSelected ? '#ffffff' : '#d4d4d8',
                           }}
                         >
@@ -3552,10 +2623,9 @@ export default function LowWorkspacePage() {
               )}
             </div>
 
-            {/* Divider */}
             <div
               style={{
-                borderTop: '1px solid #1c1c1f',
+                borderTop: '1px solid #18181b',
                 marginTop: 8,
                 paddingTop: 8,
               }}
@@ -3572,35 +2642,21 @@ export default function LowWorkspacePage() {
                   cursor: 'pointer',
                 }}
               >
-                {sharedExpanded ? (
-                  <ChevronDown size={12} />
-                ) : (
-                  <ChevronRight size={12} />
-                )}
+                {sharedExpanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
                 <span>Shared</span>
               </div>
               {sharedExpanded && (
-                <div
-                  style={{
-                    padding: '6px 12px',
-                    fontSize: 11,
-                    color: '#9ca3af',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 4,
-                  }}
-                >
+                <div style={{ padding: '4px 12px', fontSize: 11, color: '#71717a' }}>
                   {collections.map((c) => (
-                    <div key={c.id}>Collection: {c.name}</div>
+                    <div key={c.id}>{c.name}</div>
                   ))}
                 </div>
               )}
             </div>
 
-            {/* Bin Section (Matches Screenshots 1-5: `Bin 0` / `The Bin is empty`) */}
             <div
               style={{
-                borderTop: '1px solid #1c1c1f',
+                borderTop: '1px solid #18181b',
                 marginTop: 4,
                 paddingTop: 8,
               }}
@@ -3617,11 +2673,7 @@ export default function LowWorkspacePage() {
                   cursor: 'pointer',
                 }}
               >
-                {binExpanded ? (
-                  <ChevronDown size={12} />
-                ) : (
-                  <ChevronRight size={12} />
-                )}
+                {binExpanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
                 <span>Bin</span>
                 <span style={{ fontSize: 10, color: '#52525b' }}>
                   {archivedDocs.length}
@@ -3647,20 +2699,16 @@ export default function LowWorkspacePage() {
                           <span>{doc.name}</span>
                           <button
                             onClick={() => void handleRestoreDocument(doc)}
-                            title="Restore from Bin"
                             style={{
                               background: 'none',
                               border: 'none',
-                              color: '#60a5fa',
+                              color: '#0088ff',
                               cursor: 'pointer',
                               display: 'flex',
                               alignItems: 'center',
-                              gap: 3,
-                              fontSize: 11,
                             }}
                           >
-                            <RotateCcw size={11} />
-                            <span>Restore</span>
+                            <RotateCcw size={12} />
                           </button>
                         </div>
                       ))}
@@ -3674,14 +2722,14 @@ export default function LowWorkspacePage() {
       </div>
 
       {/* =================================================================== */}
-      {/* MODAL 1: VOICE RECORDING & GEMINI TRANSCRIPTION (Step 2)            */}
+      {/* MINIMAL VOICE MODAL                                                 */}
       {/* =================================================================== */}
       {micModalOpen && (
         <div
           style={{
             position: 'fixed',
             inset: 0,
-            backgroundColor: 'rgba(0,0,0,0.7)',
+            backgroundColor: 'rgba(0,0,0,0.65)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -3690,11 +2738,11 @@ export default function LowWorkspacePage() {
         >
           <div
             style={{
-              width: 460,
-              backgroundColor: '#16161a',
-              border: '1px solid #27272a',
-              borderRadius: 16,
-              padding: 22,
+              width: 380,
+              backgroundColor: '#141417',
+              border: '1px solid #242429',
+              borderRadius: 14,
+              padding: 18,
             }}
           >
             <div
@@ -3703,69 +2751,37 @@ export default function LowWorkspacePage() {
                 justifyContent: 'space-between',
                 alignItems: 'center',
                 marginBottom: 12,
+                fontSize: 13,
+                fontWeight: 600,
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Mic size={16} color="#0088ff" />
-                <span style={{ fontSize: 14, fontWeight: 700 }}>
-                  Capture Audio & Transcribe ({models.transcription})
-                </span>
-              </div>
+              <span>Voice Note</span>
               <button
                 onClick={() => setMicModalOpen(false)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#71717a',
-                  cursor: 'pointer',
-                }}
+                style={{ background: 'none', border: 'none', color: '#71717a', cursor: 'pointer' }}
               >
-                <X size={16} />
+                <X size={15} />
               </button>
             </div>
-
-            <p style={{ fontSize: 12, color: '#9ca3af', marginBottom: 12 }}>
-              Uploads audio to Cloud Storage (`organizations/{currentTenant.orgId}/recordings/...`),
-              transcribes with Gemini into Markdown, encrypts under your organization KMS key,
-              and indexes chunks into Memory.
-            </p>
 
             <textarea
               value={voiceTranscriptInput}
               onChange={(e) => setVoiceTranscriptInput(e.target.value)}
-              rows={4}
+              placeholder="Speak or type transcript..."
+              rows={3}
               style={{
                 width: '100%',
                 backgroundColor: '#1c1c21',
-                border: '1px solid #2e2e36',
+                border: 'none',
                 borderRadius: 8,
                 padding: 10,
                 fontSize: 12,
                 color: '#e5e5e7',
+                outline: 'none',
               }}
             />
 
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'flex-end',
-                gap: 8,
-                marginTop: 14,
-              }}
-            >
-              <button
-                onClick={() => setMicModalOpen(false)}
-                style={{
-                  backgroundColor: '#27272a',
-                  border: 'none',
-                  borderRadius: 8,
-                  padding: '8px 14px',
-                  fontSize: 12,
-                  cursor: 'pointer',
-                }}
-              >
-                Cancel
-              </button>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
               <button
                 onClick={() => void handleCaptureVoice()}
                 style={{
@@ -3773,13 +2789,13 @@ export default function LowWorkspacePage() {
                   color: '#ffffff',
                   border: 'none',
                   borderRadius: 8,
-                  padding: '8px 16px',
+                  padding: '6px 14px',
                   fontSize: 12,
                   fontWeight: 600,
                   cursor: 'pointer',
                 }}
               >
-                Transcribe & Save to Vault
+                Save
               </button>
             </div>
           </div>
@@ -3787,14 +2803,14 @@ export default function LowWorkspacePage() {
       )}
 
       {/* =================================================================== */}
-      {/* MODAL 2: CREATE MARKDOWN FILE OR FOLDER (Step 1)                    */}
+      {/* MINIMAL NEW FILE / FOLDER MODAL                                     */}
       {/* =================================================================== */}
       {newFileModalOpen && (
         <div
           style={{
             position: 'fixed',
             inset: 0,
-            backgroundColor: 'rgba(0,0,0,0.7)',
+            backgroundColor: 'rgba(0,0,0,0.65)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -3803,11 +2819,11 @@ export default function LowWorkspacePage() {
         >
           <div
             style={{
-              width: 460,
-              backgroundColor: '#16161a',
-              border: '1px solid #27272a',
-              borderRadius: 16,
-              padding: 22,
+              width: 380,
+              backgroundColor: '#141417',
+              border: '1px solid #242429',
+              borderRadius: 14,
+              padding: 18,
             }}
           >
             <div
@@ -3815,51 +2831,44 @@ export default function LowWorkspacePage() {
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
-                marginBottom: 14,
+                marginBottom: 12,
+                fontSize: 13,
+                fontWeight: 600,
               }}
             >
-              <span style={{ fontSize: 14, fontWeight: 700 }}>
-                Create in Vault ({currentTenant.orgId})
-              </span>
+              <span>New</span>
               <button
                 onClick={() => setNewFileModalOpen(false)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#71717a',
-                  cursor: 'pointer',
-                }}
+                style={{ background: 'none', border: 'none', color: '#71717a', cursor: 'pointer' }}
               >
-                <X size={16} />
+                <X size={15} />
               </button>
             </div>
 
-            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
               <button
                 onClick={() => setNewItemKind('file')}
                 style={{
                   flex: 1,
-                  padding: '7px 0',
-                  borderRadius: 8,
-                  border: '1px solid #2c2c32',
+                  padding: '6px 0',
+                  borderRadius: 7,
+                  border: 'none',
                   backgroundColor: newItemKind === 'file' ? '#0088ff' : '#1c1c21',
                   fontSize: 12,
-                  fontWeight: 600,
                   cursor: 'pointer',
                 }}
               >
-                Markdown File (.md)
+                File
               </button>
               <button
                 onClick={() => setNewItemKind('folder')}
                 style={{
                   flex: 1,
-                  padding: '7px 0',
-                  borderRadius: 8,
-                  border: '1px solid #2c2c32',
+                  padding: '6px 0',
+                  borderRadius: 7,
+                  border: 'none',
                   backgroundColor: newItemKind === 'folder' ? '#0088ff' : '#1c1c21',
                   fontSize: 12,
-                  fontWeight: 600,
                   cursor: 'pointer',
                 }}
               >
@@ -3867,19 +2876,18 @@ export default function LowWorkspacePage() {
               </button>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <input
                 value={newItemName}
                 onChange={(e) => setNewItemName(e.target.value)}
-                placeholder={
-                  newItemKind === 'file' ? '2026-10-18 meeting-notes.md' : 'Folder name'
-                }
+                placeholder="Name"
                 style={{
                   backgroundColor: '#1c1c21',
-                  border: '1px solid #2e2e36',
+                  border: 'none',
                   borderRadius: 8,
-                  padding: '8px 12px',
+                  padding: '8px 10px',
                   fontSize: 12,
+                  outline: 'none',
                 }}
               />
 
@@ -3888,16 +2896,17 @@ export default function LowWorkspacePage() {
                 onChange={(e) => setNewItemParentId(e.target.value)}
                 style={{
                   backgroundColor: '#1c1c21',
-                  border: '1px solid #2e2e36',
+                  border: 'none',
                   borderRadius: 8,
-                  padding: '8px 12px',
+                  padding: '8px 10px',
                   fontSize: 12,
+                  outline: 'none',
                 }}
               >
-                <option value="">Vault Root</option>
+                <option value="">Vault</option>
                 {liveFolders.map((f) => (
                   <option key={f.id} value={f.id}>
-                    Folder: {f.name}
+                    {f.name}
                   </option>
                 ))}
               </select>
@@ -3906,39 +2915,21 @@ export default function LowWorkspacePage() {
                 <textarea
                   value={newItemBody}
                   onChange={(e) => setNewItemBody(e.target.value)}
-                  rows={5}
+                  placeholder="Markdown..."
+                  rows={4}
                   style={{
                     backgroundColor: '#1c1c21',
-                    border: '1px solid #2e2e36',
+                    border: 'none',
                     borderRadius: 8,
                     padding: 10,
                     fontSize: 12,
+                    outline: 'none',
                   }}
                 />
               )}
             </div>
 
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'flex-end',
-                gap: 8,
-                marginTop: 14,
-              }}
-            >
-              <button
-                onClick={() => setNewFileModalOpen(false)}
-                style={{
-                  backgroundColor: '#27272a',
-                  border: 'none',
-                  borderRadius: 8,
-                  padding: '8px 14px',
-                  fontSize: 12,
-                  cursor: 'pointer',
-                }}
-              >
-                Cancel
-              </button>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
               <button
                 onClick={() => void handleCreateItem()}
                 style={{
@@ -3946,36 +2937,33 @@ export default function LowWorkspacePage() {
                   color: '#ffffff',
                   border: 'none',
                   borderRadius: 8,
-                  padding: '8px 16px',
+                  padding: '6px 14px',
                   fontSize: 12,
                   fontWeight: 600,
                   cursor: 'pointer',
                 }}
               >
-                Create & Encrypt
+                Create
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Toast Notification Banner */}
       {statusToast && (
         <div
           style={{
             position: 'fixed',
-            bottom: 22,
+            bottom: 20,
             left: '50%',
             transform: 'translateX(-50%)',
             backgroundColor: '#18181b',
-            border: '1px solid #0088ff',
-            color: '#f4f4f6',
-            padding: '8px 16px',
-            borderRadius: 10,
-            fontSize: 12,
-            fontWeight: 500,
+            border: '1px solid #27272a',
+            color: '#e5e5e7',
+            padding: '6px 14px',
+            borderRadius: 8,
+            fontSize: 11,
             zIndex: 200,
-            boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
           }}
         >
           {statusToast}
