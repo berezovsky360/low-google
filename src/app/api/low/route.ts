@@ -75,7 +75,8 @@ export async function GET(req: NextRequest) {
       queueItems,
       auditEvents,
       models: {
-        reasoning: process.env.LOW_REASONING_MODEL ?? 'gemini-2.5-flash',
+        ...container.modelProvider.getRuntimeConfig(),
+        reasoning: container.modelProvider.getRuntimeConfig().modelId,
         transcription: process.env.LOW_TRANSCRIPTION_MODEL ?? 'gemini-2.5-flash',
         embedding: process.env.LOW_EMBEDDING_MODEL ?? 'text-embedding-004',
       },
@@ -95,6 +96,7 @@ export async function POST(req: NextRequest) {
     await container.ensureSeeded();
     const {
       store,
+      modelProvider,
       memoryService,
       captureService,
       builderAgentService,
@@ -108,6 +110,21 @@ export async function POST(req: NextRequest) {
     const data = payload.data ?? {};
 
     switch (payload.operation) {
+      case 'configure_models': {
+        modelProvider.configureRuntime({
+          provider: data.provider as
+            | 'gemini'
+            | 'vertex'
+            | 'openai'
+            | 'anthropic'
+            | undefined,
+          modelId: data.modelId ? String(data.modelId) : undefined,
+          apiKey: data.apiKey !== undefined ? String(data.apiKey) : undefined,
+        });
+        return NextResponse.json({
+          models: modelProvider.getRuntimeConfig(),
+        });
+      }
       case 'create_organization': {
         const org = await store.createOrganization({
           orgId: String(data.orgId),
@@ -219,9 +236,26 @@ export async function POST(req: NextRequest) {
       }
 
       case 'ask_memory': {
+        if (data.provider || data.modelId || data.apiKey !== undefined) {
+          modelProvider.configureRuntime({
+            provider: data.provider as
+              | 'gemini'
+              | 'vertex'
+              | 'openai'
+              | 'anthropic'
+              | undefined,
+            modelId: data.modelId ? String(data.modelId) : undefined,
+            apiKey: data.apiKey !== undefined ? String(data.apiKey) : undefined,
+          });
+        }
+        let colIds = (data.collectionIds as string[]) ?? [];
+        if (colIds.length === 0) {
+          const allCols = await store.listKnowledgeCollections(actor);
+          colIds = allCols.map((c) => c.id);
+        }
         const answer = await memoryService.askQuestion(actor, {
           question: String(data.question),
-          collectionIds: (data.collectionIds as string[]) ?? [],
+          collectionIds: colIds,
         });
         return NextResponse.json({ answer });
       }

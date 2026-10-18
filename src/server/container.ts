@@ -19,6 +19,7 @@ import { createInMemoryFirestore } from '../../tests/helpers/in-memory-firestore
 
 export interface ServerContainer {
   store: FirestoreRepository;
+  modelProvider: GeminiModelProvider;
   memoryService: MemoryService;
   captureService: CaptureService;
   builderAgentService: BuilderAgentService;
@@ -75,6 +76,7 @@ export function getServerContainer(): ServerContainer {
 
   const container: ServerContainer = {
     store,
+    modelProvider,
     memoryService,
     captureService,
     builderAgentService,

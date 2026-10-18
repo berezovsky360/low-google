@@ -237,7 +237,11 @@ export default function LowWorkspacePage() {
   const [appChatInput, setAppChatInput] = useState('');
   const [appChatReply, setAppChatReply] = useState<string | null>(null);
 
-  // Modals
+  // Modals & Neural Network Config
+  const [modelModalOpen, setModelModalOpen] = useState(false);
+  const [nnProvider, setNnProvider] = useState<'gemini' | 'vertex' | 'openai' | 'anthropic'>('gemini');
+  const [nnModel, setNnModel] = useState('gemini-2.5-flash');
+  const [nnApiKey, setNnApiKey] = useState('');
   const [mcpModalOpen, setMcpModalOpen] = useState(false);
   const [micModalOpen, setMicModalOpen] = useState(false);
   const [voiceTranscriptInput, setVoiceTranscriptInput] = useState('');
@@ -476,6 +480,29 @@ export default function LowWorkspacePage() {
     }
   };
 
+  const handleSaveNeuralConfig = async (
+    nextProvider = nnProvider,
+    nextModel = nnModel,
+    nextKey = nnApiKey
+  ) => {
+    const res = await fetch('/api/low', {
+      method: 'POST',
+      headers: apiHeaders,
+      body: JSON.stringify({
+        operation: 'configure_models',
+        data: {
+          provider: nextProvider,
+          modelId: nextModel,
+          apiKey: nextKey,
+        },
+      }),
+    });
+    if (res.ok) {
+      setModelModalOpen(false);
+      notify(`Active Model: ${nextModel}`);
+    }
+  };
+
   const handleAskMemory = async (customQuestion?: string) => {
     const q = customQuestion ?? memoryQuestion;
     if (!q.trim()) return;
@@ -489,6 +516,9 @@ export default function LowWorkspacePage() {
           data: {
             question: q,
             collectionIds: collections.map((c) => c.id),
+            provider: nnProvider,
+            modelId: nnModel,
+            apiKey: nnApiKey,
           },
         }),
       });
@@ -839,6 +869,26 @@ export default function LowWorkspacePage() {
                 }}
               />
             )}
+
+            <button
+              onClick={() => setModelModalOpen(true)}
+              title="Select Neural Network & API Key"
+              style={{
+                backgroundColor: '#1c1c21',
+                border: '1px solid #2c2c32',
+                borderRadius: 6,
+                padding: '3px 8px',
+                fontSize: 11,
+                color: '#60a5fa',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <span>⚡ {nnModel}</span>
+            </button>
 
             <button
               onClick={() => setSearchOpen((v) => !v)}
@@ -3635,6 +3685,140 @@ export default function LowWorkspacePage() {
                 }}
               >
                 Create
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modelModalOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0,0,0,0.65)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 130,
+          }}
+        >
+          <div
+            style={{
+              width: 440,
+              backgroundColor: '#141418',
+              border: '1px solid #27272a',
+              borderRadius: 14,
+              padding: 18,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 12,
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>Neural Networks & AI Models</span>
+              <button
+                onClick={() => setModelModalOpen(false)}
+                style={{ background: 'none', border: 'none', color: '#8e8e93', cursor: 'pointer' }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            {/* Provider Selector */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+              {(
+                [
+                  { id: 'gemini', label: 'Gemini', defaultModel: 'gemini-2.5-flash' },
+                  { id: 'vertex', label: 'Vertex AI', defaultModel: 'gemini-2.5-flash' },
+                  { id: 'openai', label: 'OpenAI', defaultModel: 'gpt-4o' },
+                  { id: 'anthropic', label: 'Claude', defaultModel: 'claude-3-7-sonnet-latest' },
+                ] as const
+              ).map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => {
+                    setNnProvider(p.id);
+                    setNnModel(p.defaultModel);
+                  }}
+                  style={{
+                    padding: '7px 0',
+                    borderRadius: 8,
+                    border: '1px solid #27272a',
+                    backgroundColor: nnProvider === p.id ? '#0088ff' : '#1c1c21',
+                    color: nnProvider === p.id ? '#ffffff' : '#a1a1aa',
+                    fontSize: 11,
+                    fontWeight: nnProvider === p.id ? 600 : 400,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Model Presets */}
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {(nnProvider === 'openai'
+                ? ['gpt-4o', 'gpt-4o-mini']
+                : nnProvider === 'anthropic'
+                ? ['claude-3-7-sonnet-latest', 'claude-3-5-haiku-latest']
+                : ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash']
+              ).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setNnModel(m)}
+                  style={{
+                    padding: '5px 10px',
+                    borderRadius: 7,
+                    border: '1px solid #27272a',
+                    backgroundColor: nnModel === m ? '#27272a' : '#18181c',
+                    color: nnModel === m ? '#60a5fa' : '#8e8e93',
+                    fontSize: 11,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+
+            {/* API Key Input */}
+            <input
+              type="password"
+              value={nnApiKey}
+              onChange={(e) => setNnApiKey(e.target.value)}
+              placeholder={
+                nnProvider === 'vertex'
+                  ? 'Uses Cloud Run IAM Service Account (or paste API key)...'
+                  : `Paste ${nnProvider.toUpperCase()} API Key (optional for built-in mode)...`
+              }
+              style={{
+                backgroundColor: '#1c1c21',
+                border: '1px solid #27272a',
+                borderRadius: 8,
+                padding: '8px 10px',
+                fontSize: 12,
+                color: '#f4f4f6',
+                outline: 'none',
+              }}
+            />
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button
+                onClick={() => void handleSaveNeuralConfig(nnProvider, nnModel, nnApiKey)}
+                style={{
+                  backgroundColor: '#0088ff',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: 8,
+                  padding: '7px 16px',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Save Neural Network
               </button>
             </div>
           </div>
