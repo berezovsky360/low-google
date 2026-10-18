@@ -3885,22 +3885,47 @@ export default function LowWorkspacePage() {
               }}
             />
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <button
-                onClick={() => void handleSaveNeuralConfig(nnProvider, nnModel, nnApiKey)}
-                style={{
-                  backgroundColor: '#0088ff',
-                  color: '#ffffff',
-                  border: 'none',
-                  borderRadius: 8,
-                  padding: '7px 16px',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                Save Neural Network
-              </button>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 11, color: '#10b981' }}>
+                ● Active: {nnApiKey.trim() ? 'Live Gemini API Key' : nnProvider === 'vertex' ? 'Vertex AI / Cloud Run' : 'Built-in Grounded Mode'}
+              </span>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={async () => {
+                    await handleSaveNeuralConfig(nnProvider, nnModel, nnApiKey);
+                    setSidebarOpen(true);
+                    setMemoryQuestion('Summarize my vault and active deals');
+                    await handleAskMemory('Summarize my vault and active deals');
+                  }}
+                  style={{
+                    backgroundColor: '#1c1c21',
+                    color: '#60a5fa',
+                    border: '1px solid #2c2c32',
+                    borderRadius: 8,
+                    padding: '7px 12px',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Save & Test Model
+                </button>
+                <button
+                  onClick={() => void handleSaveNeuralConfig(nnProvider, nnModel, nnApiKey)}
+                  style={{
+                    backgroundColor: '#0088ff',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: 8,
+                    padding: '7px 16px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Save Neural Network
+                </button>
+              </div>
             </div>
           </div>
         </div>
