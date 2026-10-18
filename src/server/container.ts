@@ -190,8 +190,8 @@ async function seedJudgeDemoData(
     kind: 'file',
     name: '2026-09-07 19-45-33.md',
     parentId: null,
-    body: 'Делай там оцифровку видите то все что-то говорю у меня там что-то происходит вот типа вот какие-то такие штуки типа',
-    language: 'ru',
+    body: '# Quick Note\n\nMinimalist workspace note synced across Vault and App Studio.',
+    language: 'en',
   });
 
   for (const d of [doc1, doc2, doc3, doc4, doc5]) {
