@@ -233,6 +233,7 @@ export default function LowWorkspacePage() {
   const [newDealAmount, setNewDealAmount] = useState('40000');
 
   // Modals
+  const [mcpModalOpen, setMcpModalOpen] = useState(false);
   const [micModalOpen, setMicModalOpen] = useState(false);
   const [voiceTranscriptInput, setVoiceTranscriptInput] = useState('');
   const [newFileModalOpen, setNewFileModalOpen] = useState(false);
@@ -943,8 +944,33 @@ export default function LowWorkspacePage() {
                   borderTop: '1px solid #27272a',
                   marginTop: 4,
                   paddingTop: 4,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 2,
                 }}
               >
+                <button
+                  onClick={() => {
+                    setTenantMenuOpen(false);
+                    setMcpModalOpen(true);
+                  }}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '7px 10px',
+                    borderRadius: 7,
+                    border: 'none',
+                    backgroundColor: 'transparent',
+                    fontSize: 12,
+                    color: '#60a5fa',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <Link2 size={13} />
+                  <span>Connect Antigravity</span>
+                </button>
                 <a
                   href={`/api/export?orgId=${encodeURIComponent(
                     currentTenant.orgId
@@ -2153,7 +2179,16 @@ export default function LowWorkspacePage() {
                     </button>
 
                     <button
-                      onClick={() => window.open('/api/low/export', '_blank')}
+                      onClick={() =>
+                        window.open(
+                          `/api/export?orgId=${encodeURIComponent(
+                            currentTenant.orgId
+                          )}&uid=${encodeURIComponent(
+                            currentTenant.uid
+                          )}&role=${encodeURIComponent(currentTenant.role)}`,
+                          '_blank'
+                        )
+                      }
                       title="Export portable .zip & Docker self-host kit"
                       style={{
                         backgroundColor: '#131316',
@@ -3266,6 +3301,150 @@ export default function LowWorkspacePage() {
                 Create
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {mcpModalOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0,0,0,0.65)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 120,
+          }}
+        >
+          <div
+            style={{
+              width: 440,
+              backgroundColor: '#141418',
+              border: '1px solid #27272a',
+              borderRadius: 14,
+              padding: 18,
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>Connect LOW Memory to Antigravity</span>
+              <button
+                onClick={() => setMcpModalOpen(false)}
+                style={{ background: 'none', border: 'none', color: '#8e8e93', cursor: 'pointer' }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            {(() => {
+              const origin =
+                typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+              const mcpUrl = `${origin}/api/mcp`;
+              const mcpJson = JSON.stringify(
+                {
+                  mcpServers: {
+                    'low-memory': {
+                      url: mcpUrl,
+                    },
+                  },
+                },
+                null,
+                2
+              );
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      backgroundColor: '#1c1c21',
+                      borderRadius: 8,
+                      padding: '8px 10px',
+                      fontSize: 11,
+                    }}
+                  >
+                    <span style={{ color: '#a1a1aa', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {mcpUrl}
+                    </span>
+                    <button
+                      onClick={() => {
+                        void navigator.clipboard?.writeText(mcpUrl);
+                        notify('Copied MCP URL');
+                      }}
+                      style={{
+                        backgroundColor: '#0088ff',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: 6,
+                        padding: '4px 10px',
+                        fontSize: 11,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Copy URL
+                    </button>
+                  </div>
+
+                  <pre
+                    style={{
+                      backgroundColor: '#111114',
+                      border: '1px solid #222226',
+                      borderRadius: 8,
+                      padding: 10,
+                      fontSize: 11,
+                      color: '#d4d4d8',
+                      margin: 0,
+                      overflowX: 'auto',
+                    }}
+                  >
+                    {mcpJson}
+                  </pre>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                    <button
+                      onClick={() => {
+                        void navigator.clipboard?.writeText(
+                          `npm run connect:antigravity -- ${origin}`
+                        );
+                        notify('Copied CLI command');
+                      }}
+                      style={{
+                        flex: 1,
+                        backgroundColor: '#1c1c21',
+                        color: '#e5e5e7',
+                        border: '1px solid #2c2c32',
+                        borderRadius: 8,
+                        padding: '7px 12px',
+                        fontSize: 11,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Copy 1-Command Auto-Connect
+                    </button>
+                    <button
+                      onClick={() => {
+                        void navigator.clipboard?.writeText(mcpJson);
+                        notify('Copied mcp_config.json');
+                      }}
+                      style={{
+                        flex: 1,
+                        backgroundColor: '#0088ff',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: 8,
+                        padding: '7px 12px',
+                        fontSize: 11,
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Copy MCP JSON
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}

@@ -9,7 +9,9 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "rebuild-derived": "tsx scripts/rebuild-derived.ts"
+    "rebuild-derived": "tsx scripts/rebuild-derived.ts",
+    "mcp": "tsx scripts/low-mcp-server.ts",
+    "connect:antigravity": "tsx scripts/connect-antigravity.ts"
   },
   "dependencies": {
     "@google-cloud/kms": "^4.4.0",
